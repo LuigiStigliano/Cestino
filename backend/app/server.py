@@ -3,20 +3,25 @@ from typing import List, Optional
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 import os
-from fastapi.responses import JSONResponse
 import json
-from fastapi.staticfiles import StaticFiles
 import decimal
+from fastapi.middleware.cors import CORSMiddleware # Aggiunto
+from dotenv import load_dotenv # Aggiunto
 
-# Configurazione database (modifica se necessario)
-DB_USER = "postgres"
-DB_PASSWORD = "sys"
-DB_HOST = "localhost"
-DB_NAME = "aquila_gis"
+# Carica variabili da .env che si trova una cartella sopra (nella root di backend/)
+dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(dotenv_path=dotenv_path)
 
-DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
+# Configurazione database da variabili d'ambiente
+DB_USER = os.getenv("POSTGRES_USER", "postgres")
+DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "sys")
+DB_HOST = os.getenv("POSTGRES_HOST", "localhost")
+DB_NAME = os.getenv("POSTGRES_DB", "aquila_gis")
+DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 
-# Modello Pydantic per la risposta
+DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# Modello Pydantic per la risposta (invariato dal tuo server.py)
 class Abitazione(BaseModel):
     id: int
     objectid: Optional[int]
@@ -34,9 +39,29 @@ class Abitazione(BaseModel):
     shape_area: Optional[float]
     # geometry non serializzata qui per semplicità
 
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="."), name="static")
+app = FastAPI(title="Mio Progetto GIS Backend")
+
+# Configurazione CORS
+origins = [
+    "http://localhost",
+    "http://127.0.0.1",
+    "null", # Necessario se apri frontend/index.html direttamente come file
+    # Aggiungi altre origini se necessario, es. http://localhost:xxxx se usi un live server per il frontend
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 engine = create_engine(DATABASE_URL)
+
+@app.get("/")
+def root():
+    return {"message": "Server FastAPI per Mio Progetto GIS attivo!"}
 
 @app.get("/abitazioni", response_model=List[Abitazione])
 def get_abitazioni(limit: int = 10):
@@ -47,54 +72,61 @@ def get_abitazioni(limit: int = 10):
             FROM catasto_abitazioni
             LIMIT :limit
         """), {"limit": limit})
-        rows = result.fetchall()
+        rows = result.fetchall() # Modificato per SQLAlchemy 2.0
         if not rows:
             raise HTTPException(status_code=404, detail="Nessuna abitazione trovata")
-        return [Abitazione(**row._mapping) for row in rows]
+        # Converti Righe in dizionari prima di passarli al modello Pydantic
+        return [Abitazione(**row._asdict()) for row in rows]
 
-@app.get("/geojson")
-def get_geojson(
-    minx: float, miny: float, maxx: float, maxy: float
+
+@app.get("/geojson") # Questo endpoint sarà usato dal frontend
+def get_geojson_data( # Rinominato per chiarezza, ma l'URL rimane /geojson
+    minx: Optional[float] = None, miny: Optional[float] = None, maxx: Optional[float] = None, maxy: Optional[float] = None # Resi opzionali per un caricamento iniziale
 ):
-    """Restituisce tutte le abitazioni come FeatureCollection GeoJSON all'interno della bounding box"""
-    where = "WHERE ST_Intersects(geometry, ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 4326))"
-    params = {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
-    query = f"""
-        SELECT 
+    """Restituisce tutte le abitazioni o quelle filtrate come FeatureCollection GeoJSON."""
+    params = {}
+    where_clauses = []
+
+    if minx is not None and miny is not None and maxx is not None and maxy is not None:
+        where_clauses.append("ST_Intersects(geometry, ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 4326))")
+        params = {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
+
+    where_statement = ""
+    if where_clauses:
+        where_statement = "WHERE " + " AND ".join(where_clauses)
+
+    # ST_AsGeoJSON(ST_Centroid(geometry)) AS centroide -- Rimosso per semplificare, il frontend può calcolarlo se necessario
+    # o aggiungi il campo centroide al modello Pydantic AbitazioneGeoJSONProperties se vuoi passarlo
+    query_string = f"""
+        SELECT
             id, objectid, edifc_uso, edifc_ty, edifc_sot, classid, edifc_nome, edifc_stat, edifc_at, scril, meta_ist, edifc_mon, shape_length, shape_area,
-            ST_AsGeoJSON(geometry) AS geometry,
-            ST_AsGeoJSON(ST_Centroid(geometry)) AS centroide
+            ST_AsGeoJSON(geometry) AS geometry
         FROM catasto_abitazioni
-        {where}
-    """
+        {where_statement}
+        LIMIT 2000
+    """ # Aggiunto LIMIT per evitare di caricare troppi dati inizialmente
+
+    features = []
     with engine.connect() as conn:
-        result = conn.execute(text(query), params)
-        features = []
-        for row in result:
-            props = dict(row._mapping)
-            geom = props.pop("geometry")
-            centroide = props.pop("centroide")
-            # Converti Decimal in float
-            for k, v in props.items():
-                if isinstance(v, decimal.Decimal):
-                    props[k] = float(v)
-            features.append({
+        result = conn.execute(text(query_string), params)
+        for row_proxy in result:
+            row = row_proxy._asdict() # Converti in dizionario
+            geom_str = row.pop("geometry", None)
+            properties = {k: float(v) if isinstance(v, decimal.Decimal) else v for k, v in row.items()}
+
+            feature = {
                 "type": "Feature",
-                "geometry": json.loads(geom),
-                "properties": {**props, "centroide": json.loads(centroide)}
-            })
-        return JSONResponse({
-            "type": "FeatureCollection",
-            "features": features
-        })
+                "geometry": json.loads(geom_str) if geom_str else None,
+                "properties": properties
+            }
+            features.append(feature)
+    return {
+        "type": "FeatureCollection",
+        "features": features
+    }
 
-@app.get("/mappa")
-def serve_mappa():
-    """Serve la pagina mappa.html"""
-    from fastapi.responses import HTMLResponse
-    with open("mappa.html", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+# L'endpoint /mappa che serve mappa.html può essere rimosso se mappa.html viene aperto direttamente
+# o se la sua logica viene integrata in index.html e map_logic.js
 
-@app.get("/")
-def root():
-    return {"message": "Server FastAPI attivo!"}
+# Per avviare (dalla cartella backend/app): uvicorn server:app --reload
+# o dalla cartella backend/: uvicorn app.server:app --reload
