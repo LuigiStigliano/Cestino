@@ -56,11 +56,23 @@ def create_table_if_not_exists(cursor):
     create_verifica_sql = """
     CREATE TABLE IF NOT EXISTS verifiche_edifici (
         id SERIAL PRIMARY KEY,
-        id_edificio INTEGER REFERENCES catasto_abitazioni(id),
-        predisposto_fibra BOOLEAN NOT NULL,
-        note TEXT,
-        data_verifica TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        operatore TEXT
+        id_abitazione INTEGER REFERENCES catasto_abitazioni(id),
+        predisposto_fibra BOOLEAN,
+        indirizzo TEXT,
+        lat NUMERIC,
+        lon NUMERIC,
+        uso_edificio TEXT,
+        comune TEXT,
+        codice_belfiore TEXT,
+        codice_catastale TEXT,
+        tipo_edificio TEXT,
+        data_predisposizione DATE,
+        scala TEXT,
+        piano TEXT,
+        interno TEXT,
+        id_operatore TEXT,
+        id_tfo TEXT,
+        id_roe TEXT
     );
     """
     cursor.execute(create_table_sql)
@@ -75,7 +87,7 @@ def create_trigger(cursor):
     BEGIN
       UPDATE catasto_abitazioni
       SET predisposto_fibra = NEW.predisposto_fibra
-      WHERE id = NEW.id_edificio;
+      WHERE id = NEW.id_abitazione;
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
