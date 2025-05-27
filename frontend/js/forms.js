@@ -8,33 +8,27 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Variabili Sezione Edifici ---
     const buildingForm = document.getElementById('buildingForm');
     const btnSalvaPredisposizione = document.getElementById('btnSalvaPredisposizione');
-    // Input del form edificio (per pre-popolare tabella predisposizioni)
     const formIndirizzo = document.getElementById('formIndirizzo');
     const formLatitudine = document.getElementById('formLatitudine');
     const formLongitudine = document.getElementById('formLongitudine');
-    const formDbId = document.getElementById('formDbId'); // Usato come ID univoco per la predisposizione
+    const formDbId = document.getElementById('formDbId');
     const formObjectId = document.getElementById('formObjectId');
     const formComune = document.getElementById('formComune');
     const formCodiceCatastale = document.getElementById('formCodiceCatastale');
-    // const formTipoEdificioSelect = document.getElementById('formTipoEdificioSelect'); // RIMOSSO
     const formDataPredisposizione = document.getElementById('formDataPredisposizione');
 
 
     // --- Variabili Sezione TFO ---
-    // Gruppo Superiore
     const predisposizioniTableBody = document.getElementById('predisposizioniTableBody');
-    const btnShowAddTfo = document.getElementById('btnShowAddTfo'); // Mostra il form per aggiungere TFO
-    const btnModificaPredisposizione = document.getElementById('btnModificaPredisposizione'); // NUOVO
-    const btnEliminaPredisposizione = document.getElementById('btnEliminaPredisposizione'); // NUOVO
-    let selectedPredisposizioneRow = null; // Riga selezionata nella tabella predisposizioni
+    const btnShowAddTfo = document.getElementById('btnShowAddTfo');
+    const btnModificaPredisposizione = document.getElementById('btnModificaPredisposizione');
+    const btnEliminaPredisposizione = document.getElementById('btnEliminaPredisposizione');
+    let selectedPredisposizioneRow = null;
 
-    // Gruppo Inferiore
     const tfoSectionTitle = document.getElementById('tfoSectionTitle');
     const formTfoContainer = document.getElementById('formTfoContainer');
     const tfoForm = document.getElementById('tfoForm');
-    // const formTfoTitle = document.getElementById('formTfoTitle'); // RIMOSSO
-    const selectedPredisposizioneIdInput = document.getElementById('selectedPredisposizioneId'); // Hidden input
-    // Campi del form TFO da pre-popolare/leggere
+    const selectedPredisposizioneIdInput = document.getElementById('selectedPredisposizioneId');
     const formIndirizzoTfo = document.getElementById('formIndirizzoTfo');
     const formLatitudineTfo = document.getElementById('formLatitudineTfo');
     const formLongitudineTfo = document.getElementById('formLongitudineTfo');
@@ -46,7 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const formIdOperatoreTfo = document.getElementById('formIdOperatoreTfo');
     const formCodiceTfo = document.getElementById('formCodiceTfo');
     const formCodiceRoeTfo = document.getElementById('formCodiceRoeTfo');
-    const formTfoRowIndex = document.getElementById('formTfoRowIndex'); // Per modifica TFO
+    const formTfoRowIndex = document.getElementById('formTfoRowIndex');
 
     const btnSalvaTfo = document.getElementById('btnSalvaTfo');
     const btnAnnullaTfo = document.getElementById('btnAnnullaTfo');
@@ -57,9 +51,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const tfoActionButtons = document.getElementById('tfoActionButtons');
     const btnModificaTfo = document.getElementById('btnModificaTfo');
     const btnEliminaTfo = document.getElementById('btnEliminaTfo');
-    let selectedTfoRow = null; // Riga selezionata nella tabella TFO
+    let selectedTfoRow = null;
 
-    let tfoDataStore = {}; // Oggetto per memorizzare TFO per ID predisposizione: { "predispoId1": [tfo1, tfo2], ... }
+    let tfoDataStore = {};
 
 
     // --- Inizializzazione Mappa ---
@@ -79,10 +73,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         sectionToShow.style.display = 'block';
         if (navLinkToActivate) navLinkToActivate.classList.add('active');
-        
+
         formTfoContainer.style.display = 'none';
         if (sectionToShow === sectionEdifici && typeof map !== 'undefined' && map.invalidateSize) {
-                setTimeout(() => map.invalidateSize(), 0); // Invalida la mappa quando la sezione edifici è mostrata
+                setTimeout(() => map.invalidateSize(), 0);
         }
     }
 
@@ -95,8 +89,8 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         showSection(sectionTfo, navTfo);
     });
-    
-    showSection(sectionEdifici, navEdifici); // Mostra la sezione edifici di default
+
+    showSection(sectionEdifici, navEdifici);
 
     // --- Logica Sezione Lista Edifici ---
     if (btnSalvaPredisposizione && buildingForm) {
@@ -108,7 +102,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const dataPred = formDataPredisposizione.value;
             const comune = formComune.value;
             const codCatastale = formCodiceCatastale.value;
-            // const tipoEdificio = formTipoEdificioSelect.value; // RIMOSSO
             const lat = formLatitudine.value;
             const lon = formLongitudine.value;
 
@@ -124,39 +117,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('Indirizzo mancante.');
                 return;
             }
-                if (!comune) {
+            if (!comune) {
                 alert('Comune mancante.');
                 return;
             }
 
-            // Controllo se la predisposizione esiste già per evitare duplicati
-            const existingRow = document.querySelector(`#predisposizioniTableBody tr[data-id="${dbId || objectId}"]`);
+            const uniqueId = dbId || objectId;
+            const existingRow = document.querySelector(`#predisposizioniTableBody tr[data-id="${uniqueId}"]`);
             if (existingRow) {
                 alert('Questo edificio è già stato registrato come predisposto.');
                 return;
             }
 
-
             const predisposizioneData = {
-                id: dbId || objectId, // Usa dbId o objectId come identificativo univoco
+                id: uniqueId,
                 indirizzo: indirizzo,
                 lat: lat,
                 lon: lon,
                 comune: comune,
                 codCatastale: codCatastale,
-                // tipoEdificio: tipoEdificio, // RIMOSSO
                 dataPred: dataPred,
             };
 
-            // Aggiungi alla tabella predisposizioni
             const newRow = predisposizioniTableBody.insertRow();
             newRow.dataset.id = predisposizioneData.id;
             newRow.dataset.indirizzo = predisposizioneData.indirizzo;
             newRow.dataset.lat = predisposizioneData.lat;
             newRow.dataset.lon = predisposizioneData.lon;
             newRow.dataset.codCatastale = predisposizioneData.codCatastale;
-            
-            // MODIFICATO: Rimossa cella per tipo edificio
             newRow.innerHTML = `
                 <td>${predisposizioneData.id}</td>
                 <td>${predisposizioneData.indirizzo}</td>
@@ -164,20 +152,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 <td>${predisposizioneData.codCatastale}</td>
                 <td>${predisposizioneData.dataPred}</td>
             `;
-            
-            // Inizializza lo store per le TFO di questa predisposizione se non esiste
+
             if (!tfoDataStore[predisposizioneData.id]) {
                 tfoDataStore[predisposizioneData.id] = [];
             }
 
+            if (typeof window.markBuildingAsPredispostoOnMap === 'function') {
+                window.markBuildingAsPredispostoOnMap(predisposizioneData.id);
+            } else {
+                console.error("Funzione markBuildingAsPredispostoOnMap non trovata.");
+            }
+
             alert(`Edificio ID: ${predisposizioneData.id} registrato come predisposto e aggiunto alla tabella.`);
-            buildingForm.reset(); // Pulisci il form edifici
+            buildingForm.reset();
         });
     }
 
     // --- Logica Sezione Lista TFO ---
-
-    // Selezione riga nella tabella predisposizioni
     predisposizioniTableBody.addEventListener('click', (event) => {
         const row = event.target.closest('tr');
         if (!row) return;
@@ -185,13 +176,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (selectedPredisposizioneRow) {
             selectedPredisposizioneRow.classList.remove('selected');
         }
-        if (selectedPredisposizioneRow === row) { // Deseleziona se clicchi la stessa riga
+        if (selectedPredisposizioneRow === row) {
             selectedPredisposizioneRow = null;
             tfoTableContainer.querySelector('p').textContent = "Nessun edificio predisposto selezionato.";
             tfoTable.style.display = 'none';
             tfoActionButtons.style.display = 'none';
-            tfoTableBody.innerHTML = ''; // Pulisci tabella TFO
-            formTfoContainer.style.display = 'none'; // Nascondi form TFO
+            tfoTableBody.innerHTML = '';
+            formTfoContainer.style.display = 'none';
             tfoSectionTitle.textContent = 'Terminazioni Ottiche (TFO)';
         } else {
             selectedPredisposizioneRow = row;
@@ -199,18 +190,17 @@ document.addEventListener('DOMContentLoaded', function() {
             const predispoId = selectedPredisposizioneRow.dataset.id;
             const predispoAddr = selectedPredisposizioneRow.dataset.indirizzo;
             tfoSectionTitle.textContent = `Terminazioni Ottiche (TFO) per: ${predispoAddr || predispoId}`;
-            
             loadTfosForPredisposizione(predispoId);
-            formTfoContainer.style.display = 'none'; // Nascondi form TFO se era aperto
+            formTfoContainer.style.display = 'none';
         }
     });
 
     function loadTfosForPredisposizione(predispoId) {
-        tfoTableBody.innerHTML = ''; // Pulisci la tabella TFO
+        tfoTableBody.innerHTML = '';
         const tfos = tfoDataStore[predispoId] || [];
 
         if (tfos.length > 0) {
-            tfos.forEach((data, index) => addTfoToTable(data, predispoId, false, index)); // Aggiungi index per modifica
+            tfos.forEach((data, index) => addTfoToTable(data, predispoId, false, index));
             tfoTableContainer.querySelector('p').style.display = 'none';
             tfoTable.style.display = '';
             tfoActionButtons.style.display = '';
@@ -220,11 +210,10 @@ document.addEventListener('DOMContentLoaded', function() {
             tfoTable.style.display = 'none';
             tfoActionButtons.style.display = 'none';
         }
-        selectedTfoRow = null; // Deseleziona qualsiasi TFO precedente
+        selectedTfoRow = null;
         if(tfoTable.querySelector('.selected')) tfoTable.querySelector('.selected').classList.remove('selected');
     }
-    
-    // Mostra il form per "Aggiungi TFO"
+
     btnShowAddTfo.addEventListener('click', () => {
         if (!selectedPredisposizioneRow) {
             alert('Per favore, seleziona un Edificio Predisposto dalla tabella prima di aggiungere una TFO.');
@@ -233,33 +222,22 @@ document.addEventListener('DOMContentLoaded', function() {
         showTfoFormInternal('add');
     });
 
-    // NUOVO: Event Listener per "Modifica Predisposizione"
     btnModificaPredisposizione.addEventListener('click', () => {
         if (!selectedPredisposizioneRow) {
             alert('Per favore, seleziona un Edificio Predisposto dalla tabella da modificare.');
             return;
         }
-        // Popola il form edifici con i dati della riga selezionata
         formIndirizzo.value = selectedPredisposizioneRow.cells[1].textContent;
         formComune.value = selectedPredisposizioneRow.cells[2].textContent;
         formCodiceCatastale.value = selectedPredisposizioneRow.cells[3].textContent;
-        // formTipoEdificioSelect.value = selectedPredisposizioneRow.cells[4].textContent; // RIMOSSO
-        formDataPredisposizione.value = selectedPredisposizioneRow.cells[4].textContent; // MODIFICATO Indice
-        
-        // Recupera gli altri dati necessari se li hai salvati nei dataset della riga
+        formDataPredisposizione.value = selectedPredisposizioneRow.cells[4].textContent;
         formDbId.value = selectedPredisposizioneRow.dataset.id;
         formLatitudine.value = selectedPredisposizioneRow.dataset.lat || '';
         formLongitudine.value = selectedPredisposizioneRow.dataset.lon || '';
-        // objectId e edifc_uso potrebbero non essere direttamente nella tabella predisposizioni
-        // Potresti doverli recuperare da un data store se necessario per la modifica
-        
         alert("Modulo registrazione edifici pre-compilato. Modifica i dati e salva.");
-        showSection(sectionEdifici, navEdifici); // Vai alla sezione edifici
-        // Dovrai modificare la logica di btnSalvaPredisposizione per GESTIRE L'UPDATE
-        // invece di creare sempre una nuova riga.
+        showSection(sectionEdifici, navEdifici);
     });
 
-    // NUOVO: Event Listener per "Elimina Predisposizione"
     btnEliminaPredisposizione.addEventListener('click', () => {
         if (!selectedPredisposizioneRow) {
             alert('Per favore, seleziona un Edificio Predisposto dalla tabella da eliminare.');
@@ -267,18 +245,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (confirm('Sei sicuro di voler eliminare questa predisposizione e tutte le TFO associate? L\'azione è irreversibile.')) {
             const predispoIdToDelete = selectedPredisposizioneRow.dataset.id;
-            
-            // Rimuovi dallo store TFO
+
             if (tfoDataStore[predispoIdToDelete]) {
                 delete tfoDataStore[predispoIdToDelete];
                 console.log(`TFOs per l'edificio ID ${predispoIdToDelete} eliminate dallo store.`);
             }
-            
-            // Rimuovi la riga dalla tabella predisposizioni
+
+            // --- MODIFICATO: Chiama la funzione per aggiornare la mappa ---
+            if (typeof window.unmarkBuildingAsPredispostoOnMap === 'function') {
+                window.unmarkBuildingAsPredispostoOnMap(predispoIdToDelete);
+            } else {
+                console.error("Funzione unmarkBuildingAsPredispostoOnMap non trovata.");
+            }
+            // --- FINE MODIFICA ---
+
             selectedPredisposizioneRow.remove();
             selectedPredisposizioneRow = null;
-            
-            // Pulisci la tabella TFO se quella eliminata era visualizzata
+
             tfoTableBody.innerHTML = '';
             tfoTableContainer.querySelector('p').textContent = "Nessun edificio predisposto selezionato.";
             tfoTableContainer.querySelector('p').style.display = 'block';
@@ -290,10 +273,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-
     function clearTfoForm() {
         tfoForm.reset();
-        formTfoRowIndex.value = ''; // Per la modifica
+        formTfoRowIndex.value = '';
     }
 
     function showTfoFormInternal(mode = 'add', tfoDataToEdit = null, rowIndex = null) {
@@ -304,14 +286,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const predispoLon = selectedPredisposizioneRow.dataset.lon;
         const predispoCatasto = selectedPredisposizioneRow.dataset.codCatastale;
 
-        selectedPredisposizioneIdInput.value = predispoId; // Imposta l'ID della predisposizione
+        selectedPredisposizioneIdInput.value = predispoId;
         formIndirizzoTfo.value = predispoAddr || '';
         formLatitudineTfo.value = predispoLat || '';
         formLongitudineTfo.value = predispoLon || '';
         formCodiceCatastaleTfo.value = predispoCatasto || '';
 
         if (mode === 'edit' && tfoDataToEdit) {
-            // formTfoTitle.textContent = 'Modifica TFO'; // RIMOSSO
             formDataPredisposizioneTfo.value = tfoDataToEdit.dataPredTFO;
             formScalaTfo.value = tfoDataToEdit.scala;
             formPianoTfo.value = tfoDataToEdit.piano;
@@ -319,8 +300,8 @@ document.addEventListener('DOMContentLoaded', function() {
             formIdOperatoreTfo.value = tfoDataToEdit.operatore;
             formCodiceTfo.value = tfoDataToEdit.codiceTfo;
             formCodiceRoeTfo.value = tfoDataToEdit.codiceRoe;
-            formTfoRowIndex.value = rowIndex; // Imposta l'indice per la modifica
-        } 
+            formTfoRowIndex.value = rowIndex;
+        }
         formTfoContainer.style.display = 'block';
     }
 
@@ -337,7 +318,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const tfoData = {
-            // Non più indirizzo, lat, lon, catastale TFO perché presi da predisposizione
             dataPredTFO: formDataPredisposizioneTfo.value,
             scala: formScalaTfo.value,
             piano: formPianoTfo.value,
@@ -346,8 +326,7 @@ document.addEventListener('DOMContentLoaded', function() {
             codiceTfo: formCodiceTfo.value,
             codiceRoe: formCodiceRoeTfo.value,
         };
-        
-        // Validazione base
+
         if (!tfoData.dataPredTFO || !tfoData.codiceTfo) {
             alert("Per favore, compila almeno Data Predisposizione TFO e Codice TFO.");
             return;
@@ -355,12 +334,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const rowIndexToEdit = formTfoRowIndex.value;
 
-        if (rowIndexToEdit !== '') { // Modalità Modifica
+        if (rowIndexToEdit !== '') {
             const tfoIndex = parseInt(rowIndexToEdit);
-            tfoDataStore[currentPredispoId][tfoIndex] = tfoData; // Aggiorna nello store
-            // Aggiorna la riga nella tabella
+            tfoDataStore[currentPredispoId][tfoIndex] = tfoData;
             const row = tfoTableBody.rows[tfoIndex];
-                row.cells[0].textContent = tfoData.scala;
+            row.cells[0].textContent = tfoData.scala;
             row.cells[1].textContent = tfoData.piano;
             row.cells[2].textContent = tfoData.interno;
             row.cells[3].textContent = tfoData.dataPredTFO;
@@ -369,34 +347,29 @@ document.addEventListener('DOMContentLoaded', function() {
             row.cells[6].textContent = tfoData.codiceRoe;
             row.classList.remove('selected');
             selectedTfoRow = null;
-        } else { // Modalità Aggiungi
-             // Aggiungi e ottieni l'indice
+        } else {
             const newIndex = tfoDataStore[currentPredispoId].length;
-            addTfoToTable(tfoData, currentPredispoId, true, newIndex); // true per salvare, passa indice
+            addTfoToTable(tfoData, currentPredispoId, true, newIndex);
         }
 
         formTfoContainer.style.display = 'none';
         clearTfoForm();
-        
-        // Ricarica la tabella per riflettere le modifiche/aggiunte
-        loadTfosForPredisposizione(currentPredispoId); // Ricarica tutta la tabella TFO
-
+        loadTfosForPredisposizione(currentPredispoId);
         alert('TFO salvata!');
     });
 
     function addTfoToTable(data, predispoId, saveToStore = true, index) {
-            if (saveToStore) {
-                if (!tfoDataStore[predispoId]) {
-                    tfoDataStore[predispoId] = [];
-                }
-                // Se non è modifica, aggiungi; se è modifica, è già stato aggiornato
-                if (index === tfoDataStore[predispoId].length) {
-                    tfoDataStore[predispoId].push(data);
-                }
+        if (saveToStore) {
+            if (!tfoDataStore[predispoId]) {
+                tfoDataStore[predispoId] = [];
             }
+            if (index === tfoDataStore[predispoId].length) {
+                tfoDataStore[predispoId].push(data);
+            }
+        }
 
         const newRow = tfoTableBody.insertRow();
-        newRow.dataset.index = index; // Salva l'indice nella riga
+        newRow.dataset.index = index;
         newRow.innerHTML = `
             <td>${data.scala}</td>
             <td>${data.piano}</td>
@@ -406,12 +379,11 @@ document.addEventListener('DOMContentLoaded', function() {
             <td>${data.codiceTfo}</td>
             <td>${data.codiceRoe}</td>
         `;
-            tfoTableContainer.querySelector('p').style.display = 'none';
-            tfoTable.style.display = '';
-            tfoActionButtons.style.display = '';
+        tfoTableContainer.querySelector('p').style.display = 'none';
+        tfoTable.style.display = '';
+        tfoActionButtons.style.display = '';
     }
-    
-    // Selezione riga Tabella TFO
+
     tfoTableBody.addEventListener('click', (event) => {
         const row = event.target.closest('tr');
         if (!row) return;
@@ -432,13 +404,13 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Seleziona una riga TFO da modificare.');
             return;
         }
-        if (!selectedPredisposizioneRow) { // Controllo di sicurezza
+        if (!selectedPredisposizioneRow) {
             alert('Nessun edificio predisposto selezionato.');
             return;
         }
         const currentPredispoId = selectedPredisposizioneRow.dataset.id;
-        const tfoIndex = parseInt(selectedTfoRow.dataset.index); // Usa l'indice salvato
-        
+        const tfoIndex = parseInt(selectedTfoRow.dataset.index);
+
         if (isNaN(tfoIndex) || !tfoDataStore[currentPredispoId] || tfoIndex >= tfoDataStore[currentPredispoId].length) {
             console.error("Indice TFO non valido o dato non trovato:", tfoIndex, currentPredispoId);
             alert("Errore nel recupero dei dati TFO. Riprova.");
@@ -454,23 +426,23 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Seleziona una riga TFO da eliminare.');
             return;
         }
-            if (!selectedPredisposizioneRow) { // Controllo di sicurezza
+        if (!selectedPredisposizioneRow) {
             alert('Nessun edificio predisposto selezionato.');
             return;
         }
 
         if (confirm('Sei sicuro di voler eliminare questa TFO?')) {
             const currentPredispoId = selectedPredisposizioneRow.dataset.id;
-            const tfoIndex = parseInt(selectedTfoRow.dataset.index); // Usa l'indice salvato
+            const tfoIndex = parseInt(selectedTfoRow.dataset.index);
 
             if (isNaN(tfoIndex) || !tfoDataStore[currentPredispoId] || tfoIndex >= tfoDataStore[currentPredispoId].length) {
                  console.error("Indice TFO non valido per eliminazione:", tfoIndex, currentPredispoId);
                  alert("Errore nell'eliminazione della TFO. Riprova.");
                  return;
             }
-            
-            tfoDataStore[currentPredispoId].splice(tfoIndex, 1); // Rimuovi dallo store
-            loadTfosForPredisposizione(currentPredispoId); // Ricarica la tabella
+
+            tfoDataStore[currentPredispoId].splice(tfoIndex, 1);
+            loadTfosForPredisposizione(currentPredispoId);
         }
     });
 });
