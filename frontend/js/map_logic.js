@@ -8,6 +8,10 @@ let debounceTimer = null;
 let lastBounds = null;
 let errorMessageTimeout = null;
 
+// NUOVE: Per gestire i layer e lo stato di predisposizione
+let buildingLayers = {}; // Oggetto per mappare ID edificio -> layer Leaflet
+let predispostoIds = new Set(); // Set per memorizzare gli ID degli edifici predisposti
+
 // Funzione per inizializzare la mappa (chiamata da index.html)
 function initMap() {
     // Centro su L'Aquila (o dove preferisci)
@@ -59,7 +63,7 @@ function initMap() {
 function showErrorMessage(message, duration = 5000) {
     const errorElement = document.getElementById('map-error-message');
     if (!errorElement) return;
-    
+
     errorElement.innerHTML = `
         <div class="alert alert-danger">
             <strong>Errore</strong><br>
@@ -68,12 +72,12 @@ function showErrorMessage(message, duration = 5000) {
         </div>
     `;
     errorElement.style.display = 'block';
-    
+
     // Cancella eventuali timeout precedenti
     if (errorMessageTimeout) {
         clearTimeout(errorMessageTimeout);
     }
-    
+
     // Imposta un nuovo timeout per nascondere il messaggio
     errorMessageTimeout = setTimeout(() => {
         errorElement.style.display = 'none';
@@ -86,19 +90,21 @@ function loadBuildingsDataByBounds() {
     if (zoom < minZoomToLoad) {
         if (geoJsonLayer) map.removeLayer(geoJsonLayer);
         if (centroidLayer) map.removeLayer(centroidLayer);
+        buildingLayers = {};
         return;
     }
-    
+
     const bounds = map.getBounds();
     let geometry_type;
     if (zoom > 16) {
-        geometry_type = 'both'; // Mostra centroidi e poligoni SOLO se zoom > 16
+        geometry_type = 'both';
     } else {
         if (geoJsonLayer) map.removeLayer(geoJsonLayer);
         if (centroidLayer) map.removeLayer(centroidLayer);
+        buildingLayers = {};
         return;
     }
-    
+
     const params = {
         west: bounds.getWest(),
         south: bounds.getSouth(),
@@ -107,16 +113,15 @@ function loadBuildingsDataByBounds() {
         zoom: zoom,
         geometry_type: geometry_type
     };
-    
+
     const query = Object.keys(params).map(k => `${k}=${encodeURIComponent(params[k])}`).join('&');
     const fetchUrl = `http://127.0.0.1:8000/geojson/bbox?${query}`;
-    
-    // Mostra l'indicatore di caricamento con informazioni sul livello di zoom
+
     if (loadingIndicator) {
         loadingIndicator.innerHTML = `Caricamento dati (zoom: ${zoom})...`;
         loadingIndicator.style.display = 'block';
     }
-    
+
     fetch(fetchUrl)
         .then(response => {
             if (!response.ok) {
@@ -127,24 +132,22 @@ function loadBuildingsDataByBounds() {
         .then(data => {
             if (geoJsonLayer) map.removeLayer(geoJsonLayer);
             if (centroidLayer) map.removeLayer(centroidLayer);
-            
+
+            buildingLayers = {};
             geoJsonLayer = null;
             centroidLayer = null;
-            
-            // Mostra statistiche sui dati caricati
+
             const featureCount = data.features ? data.features.length : 0;
             if (loadingIndicator) {
                 loadingIndicator.innerHTML = `Caricati ${featureCount} elementi`;
-                // Nascondi dopo 2 secondi
                 setTimeout(() => {
                     loadingIndicator.style.display = 'none';
                 }, 2000);
             }
-            
-            // Separa le feature dei poligoni e dei centroidi
+
             const polygonFeatures = [];
             const centroidFeatures = [];
-            
+
             data.features.forEach(feature => {
                 if (feature.properties && feature.properties.is_centroid) {
                     centroidFeatures.push(feature);
@@ -152,69 +155,64 @@ function loadBuildingsDataByBounds() {
                     polygonFeatures.push(feature);
                 }
             });
-            
-            // Crea il layer per i poligoni
+
             geoJsonLayer = L.geoJSON({
                 type: "FeatureCollection",
                 features: polygonFeatures
             }, {
                 style: function(feature) {
+                    const buildingId = feature.properties.id || feature.properties.objectid;
+                    const isPredisposto = predispostoIds.has(String(buildingId));
+
                     if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
-                        return { 
-                            color: 'red', 
-                            weight: 1, 
+                        return {
+                            color: isPredisposto ? 'yellow' : 'red',
+                            weight: 1,
                             fillOpacity: 0.3,
-                            // Disabilita la semplificazione automatica di Leaflet
                             smoothFactor: 0
                         };
                     }
                     return {};
                 },
                 onEachFeature: function(feature, layer) {
-                    // Crea un popup con le informazioni richieste: id, uso, coordinate, predisposto_fibra
+                    const props = feature.properties;
+                    const buildingId = props.id || props.objectid;
+                    if (buildingId) {
+                         buildingLayers[String(buildingId)] = layer;
+                    }
+
                     let popupContent = '<div style="font-family: Arial, sans-serif; font-size: 12px;">';
-                    
-                    // ID dell'edificio
-                    popupContent += '<strong>ID:</strong> ' + (feature.properties.id || feature.properties.objectid || 'N/D') + '<br>';
-                    
-                    // Uso dell'edificio
-                    popupContent += '<strong>Uso:</strong> ' + (feature.properties.edifc_uso || 'N/D') + '<br>';
-                    
-                    // Coordinate (dal centroide se disponibile)
-                    if (feature.properties.centroid) {
-                        const coords = feature.properties.centroid.coordinates;
+                    popupContent += '<strong>ID:</strong> ' + (props.id || props.objectid || 'N/D') + '<br>';
+                    popupContent += '<strong>Uso:</strong> ' + (props.edifc_uso || 'N/D') + '<br>';
+
+                    if (props.centroid) {
+                        const coords = props.centroid.coordinates;
                         popupContent += '<strong>Coordinate:</strong> ' + coords[1].toFixed(8) + ', ' + coords[0].toFixed(8) + '<br>';
                     } else {
-                        // Usa il centroide calcolato della geometria
                         const center = layer.getBounds().getCenter();
                         popupContent += '<strong>Coordinate:</strong> ' + center.lat.toFixed(8) + ', ' + center.lng.toFixed(8) + '<br>';
                     }
-                    
                     popupContent += '</div>';
-                    
                     layer.bindPopup(popupContent);
-                    
+
                     layer.on('click', function(e) {
                         const props = e.target.feature.properties;
-                        const latlng = e.latlng; // Ottieni le coordinate del click
-                        
+                        const latlng = e.latlng;
+
                         const formIndirizzo = document.getElementById('formIndirizzo');
                         const formLat = document.getElementById('formLatitudine');
                         const formLon = document.getElementById('formLongitudine');
                         const formDbId = document.getElementById('formDbId');
                         const formObjectId = document.getElementById('formObjectId');
                         const formEdifcUso = document.getElementById('formEdifcUso');
-                        
+
                         if (formIndirizzo) formIndirizzo.value = props.edifc_nome || props.id || '';
                         if (formObjectId) formObjectId.value = props.objectid || '';
                         if (formDbId) formDbId.value = props.id || '';
                         if (formEdifcUso) formEdifcUso.value = props.edifc_uso || '';
-                        
-                        // Aggiorna le coordinate con precisione
                         if (formLat) formLat.value = latlng.lat.toFixed(8);
                         if (formLon) formLon.value = latlng.lng.toFixed(8);
-                        
-                        // Se il backend fornisce il centroide come proprietà, usalo invece delle coordinate del click
+
                         if (props.centroid && formLat && formLon) {
                             const centroidCoords = props.centroid.coordinates;
                             formLon.value = centroidCoords[0].toFixed(8);
@@ -223,8 +221,7 @@ function loadBuildingsDataByBounds() {
                     });
                 }
             }).addTo(map);
-            
-            // Crea il layer per i centroidi
+
             centroidLayer = L.geoJSON({
                 type: "FeatureCollection",
                 features: centroidFeatures
@@ -240,44 +237,66 @@ function loadBuildingsDataByBounds() {
                     });
                 },
                 onEachFeature: function(feature, layer) {
-                    // Crea un popup con le informazioni essenziali per il centroide
                     let popupContent = '<div style="font-family: Arial, sans-serif; font-size: 12px;">';
                     popupContent += '<strong>Centroide</strong><br>';
-                    
-                    // ID dell'edificio associato
                     if (feature.properties.parent_id) {
                         popupContent += '<strong>ID Edificio:</strong> ' + feature.properties.parent_id + '<br>';
                     }
-                    
-                    // Coordinate precise del centroide
-                    // Ottieni le coordinate dal layer stesso, non da una variabile esterna
                     const coordinates = feature.geometry.coordinates;
                     popupContent += '<strong>Coordinate:</strong> ' + coordinates[1].toFixed(8) + ', ' + coordinates[0].toFixed(8) + '<br>';
-                    
                     popupContent += '</div>';
-                    
                     layer.bindPopup(popupContent);
                 }
             }).addTo(map);
         })
         .catch(err => {
             console.error('Errore nel caricamento dei dati:', err);
-            
-            // Aggiorna l'indicatore di caricamento con l'errore
             if (loadingIndicator) {
                 loadingIndicator.innerHTML = `<span style="color: red">Errore: ${err.message}</span>`;
-                // Nascondi dopo 5 secondi
                 setTimeout(() => {
                     loadingIndicator.style.display = 'none';
                 }, 5000);
             }
-            
-            // Mostra un messaggio di errore più dettagliato
             showErrorMessage(`Errore nel caricamento dei dati dalla mappa: ${err.message}`);
         });
 }
 
-// Chiama initMap quando il DOM è pronto (se questo script è incluso nell'head o prima del div #map)
-// Altrimenti, chiama initMap() da uno script inline in index.html dopo che il div #map è stato caricato.
-// Esempio: document.addEventListener('DOMContentLoaded', initMap);
-// Per ora, initMap() sarà chiamata da index.html
+/**
+ * Aggiorna lo stile di un edificio sulla mappa a "predisposto" (giallo)
+ * e lo aggiunge al set degli ID predisposti.
+ * @param {string|number} buildingId L'ID dell'edificio da aggiornare.
+ */
+function markBuildingAsPredispostoOnMap(buildingId) {
+    const idStr = String(buildingId);
+    console.log(`Tentativo di marcare ${idStr} come predisposto sulla mappa.`);
+    predispostoIds.add(idStr);
+    const layerToUpdate = buildingLayers[idStr];
+    if (layerToUpdate) {
+        layerToUpdate.setStyle({ color: 'yellow' });
+        console.log(`Layer ${idStr} trovato e aggiornato a giallo.`);
+    } else {
+        console.warn(`Layer ${idStr} non trovato sulla mappa. Potrebbe essere fuori BBox/Zoom o non ancora caricato.`);
+    }
+}
+window.markBuildingAsPredispostoOnMap = markBuildingAsPredispostoOnMap;
+
+/**
+ * Rimuove lo stato "predisposto" da un edificio sulla mappa (rosso)
+ * e lo rimuove dal set degli ID predisposti.
+ * @param {string|number} buildingId L'ID dell'edificio da aggiornare.
+ */
+function unmarkBuildingAsPredispostoOnMap(buildingId) {
+    const idStr = String(buildingId);
+    console.log(`Tentativo di rimuovere lo stato predisposto da ${idStr} sulla mappa.`);
+    predispostoIds.delete(idStr);
+    const layerToUpdate = buildingLayers[idStr];
+    if (layerToUpdate) {
+        layerToUpdate.setStyle({ color: 'red' });
+        console.log(`Layer ${idStr} trovato e aggiornato a rosso.`);
+    } else {
+        console.warn(`Layer ${idStr} non trovato sulla mappa per l'aggiornamento a rosso.`);
+    }
+}
+window.unmarkBuildingAsPredispostoOnMap = unmarkBuildingAsPredispostoOnMap;
+
+// initMap() sarà chiamata da index.html o da forms.js
