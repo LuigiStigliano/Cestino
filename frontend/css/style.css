@@ -1,0 +1,9 @@
+#map { height: 500px; width: 100%; margin-bottom: 1rem; }
+body { margin: 0; padding-top: 1rem; padding-bottom: 1rem; }
+.container { max-width: 1140px; margin-left: auto; margin-right: auto; padding-left: 15px; padding-right: 15px; }
+.leaflet-container { font-size: 1rem; }
+.form-section { margin-bottom: 2rem; }
+#sectionTfo, #formTfoContainer { display: none; } /* Nascondi sezioni TFO per default */
+.table-striped tbody tr:hover { background-color: #f5f5f5; cursor: pointer; }
+.table-striped tbody tr.selected { background-color: #e0e0e0; }
+.table-responsive { margin-bottom: 1rem; }
