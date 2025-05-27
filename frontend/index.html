@@ -2,20 +2,26 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>INFRATEL ITALIA - Registrazione Edifici</title>
+    <title>INFRATEL ITALIA - Registrazione Edifici e TFO</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.6.1/dist/css/bootstrap-italia.min.css">
     <link rel="stylesheet" href="css/leaflet.css">
     <style>
         #map { height: 500px; width: 100%; margin-bottom: 1rem; }
-        body { margin: 0; padding-top: 1rem; padding-bottom: 1rem; /* Aggiunto padding per respiro */ }
-        .container { max-width: 1140px; margin-left: auto; margin-right: auto; padding-left: 15px; padding-right: 15px; } /* Container per centrare */
+        body { margin: 0; padding-top: 1rem; padding-bottom: 1rem; }
+        .container { max-width: 1140px; margin-left: auto; margin-right: auto; padding-left: 15px; padding-right: 15px; }
         .leaflet-container { font-size: 1rem; }
         .form-section { margin-bottom: 2rem; }
+        #sectionTfo, #formTfoContainer { display: none; } /* Nascondi sezioni TFO per default */
+        .table-striped tbody tr:hover { background-color: #f5f5f5; cursor: pointer; }
+        .table-striped tbody tr.selected { background-color: #e0e0e0; }
+        .table-responsive { margin-bottom: 1rem; }
     </style>
 </head>
 
-<body> <div class="container"> <header class="it-header-wrapper">
+<body>
+<div class="container">
+    <header class="it-header-wrapper">
       <div class="it-header-slim-wrapper">
         <div class="container-xxl">
           <div class="row">
@@ -75,33 +81,7 @@
                     </a>
                   </div>
                   <div class="it-right-zone">
-                    <div class="it-socials d-none d-md-flex">
-                      <span>Seguici su</span>
-                      <ul>
-                        <li>
-                          <a href="#" aria-label="Facebook" target="_blank">
-                            <svg class="icon"><use href="https://italia.github.io/bootstrap-italia/dist/svg/sprites.svg#it-facebook"></use></svg>
-                          </a>
-                        </li>
-                        <li>
-                          <a href="#" aria-label="Github" target="_blank">
-                            <svg class="icon"><use href="https://italia.github.io/bootstrap-italia/dist/svg/sprites.svg#it-github"></use></svg>
-                          </a>
-                        </li>
-                        <li>
-                          <a href="#" aria-label="Twitter" target="_blank">
-                            <svg class="icon"><use href="https://italia.github.io/bootstrap-italia/dist/svg/sprites.svg#it-twitter"></use></svg>
-                          </a>
-                        </li>
-                      </ul>
-                    </div>
-                    <div class="it-search-wrapper">
-                      <span class="d-none d-md-block">Cerca</span>
-                      <a class="search-link rounded-icon" aria-label="Cerca nel sito" href="#">
-                        <svg class="icon"><use href="https://italia.github.io/bootstrap-italia/dist/svg/sprites.svg#it-search"></use></svg>
-                      </a>
-                    </div>
-                  </div>
+                     </div>
                 </div>
               </div>
             </div>
@@ -113,23 +93,20 @@
               <div class="col-12">
                 <nav class="navbar navbar-expand-lg has-megamenu" aria-label="Navigazione principale">
                   <button class="custom-navbar-toggler" type="button" aria-controls="navC1" aria-expanded="false" aria-label="Mostra/Nascondi la navigazione" data-bs-toggle="navbarcollapsible" data-bs-target="#navC1">
-                    <svg class="icon">
-                      <use href="https://italia.github.io/bootstrap-italia/dist/svg/sprites.svg#it-burger"></use>
-                    </svg>
+                    <svg class="icon"><use href="https://italia.github.io/bootstrap-italia/dist/svg/sprites.svg#it-burger"></use></svg>
                   </button>
                   <div class="navbar-collapsable" id="navC1" style="display: none;">
                     <div class="overlay" style="display: none;"></div>
                     <div class="close-div">
                       <button class="btn close-menu" type="button">
                         <span class="visually-hidden">Nascondi la navigazione</span>
-                        <svg class="icon">
-                          <use href="https://italia.github.io/bootstrap-italia/dist/svg/sprites.svg#it-close-big"></use>
-                        </svg>
+                        <svg class="icon"><use href="https://italia.github.io/bootstrap-italia/dist/svg/sprites.svg#it-close-big"></use></svg>
                       </button>
                     </div>
                     <div class="menu-wrapper">
                         <ul class="navbar-nav">
-                            <li class="nav-item active"><a class="nav-link active" href="#" aria-current="page"><span>Lista Edifici</span></a></li>
+                            <li class="nav-item"><a class="nav-link active" href="#" id="navEdifici"><span>Lista Edifici</span></a></li>
+                            <li class="nav-item"><a class="nav-link" href="#" id="navTfo"><span>Lista TFO</span></a></li>
                         </ul>
                     </div>
                   </div>
@@ -142,163 +119,701 @@
     </header>
 
     <main>
-        <div class="form-section">
-            <h2>Registrazione degli Edifici Predisposti alla Banda Ultralarga</h2>
-            <p>Clicca su un edificio nella mappa per popolarne i dati, poi compila i campi mancanti per registrarlo come predisposto.</p>
-            <br>
+        <div id="sectionEdifici">
+            <div class="form-section">
+                <h2>Registrazione degli Edifici Predisposti alla Banda Ultralarga</h2>
+                <p>Clicca su un edificio nella mappa per popolarne i dati, poi compila i campi mancanti per registrarlo come predisposto.</p>
+                <br>
+            </div>
+
+            <div id="map"></div>
+
+            <div class="form-section">
+                <h3>Dettagli Edificio Selezionato</h3>
+                <form id="buildingForm">
+                    <div class="form-group">
+                        <label class="active" for="formIndirizzo">Indirizzo (da mappa o da inserire)</label>
+                        <input type="text" class="form-control" id="formIndirizzo" placeholder="VIA, N.CIVICO, COMUNE (se non da mappa)">
+                    </div>
+                    <div class="row">
+                        <div class="form-group col-md-6">
+                            <label class="active" for="formLatitudine">Latitudine (da mappa)</label>
+                            <input type="text" class="form-control" id="formLatitudine" readonly>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label class="active" for="formLongitudine">Longitudine (da mappa)</label>
+                            <input type="text" class="form-control" id="formLongitudine" readonly>
+                        </div>
+                    </div>
+                     <div class="row">
+                        <div class="form-group col-md-6">
+                            <label class="active" for="formDbId">ID Database (da mappa)</label>
+                            <input type="text" class="form-control" id="formDbId" readonly>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label class="active" for="formObjectId">OBJECTID Originale (da mappa)</label>
+                            <input type="text" class="form-control" id="formObjectId" readonly>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="active" for="formEdifcUso">Uso Edificio (da mappa)</label>
+                        <input type="text" class="form-control" id="formEdifcUso" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="active" for="formComune">Comune (per predisposizione)</label>
+                        <input type="text" class="form-control" id="formComune" placeholder="Inserisci il comune">
+                    </div>
+                    <div class="form-group">
+                        <label class="active" for="formCodiceBelfiore">Codice Belfiore comune (per predisposizione)</label>
+                        <input type="text" class="form-control" id="formCodiceBelfiore" placeholder="Inserisci il codice Belfiore">
+                    </div>
+                    <div class="form-group">
+                        <label class="active" for="formCodiceCatastale">Codice Catastale particella (per predisposizione)</label>
+                        <input type="text" class="form-control" id="formCodiceCatastale" placeholder="Inserisci il codice catastale">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="formTipoEdificioSelect">Tipo Edificio (per predisposizione)</label>
+                        <select class="form-select form-select-sm" id="formTipoEdificioSelect">
+                            <option value="" selected disabled>Seleziona tipo</option>
+                            <option value="residenziale">Residenziale</option>
+                            <option value="commerciale">Commerciale</option>
+                            <option value="industriale">Industriale</option>
+                            <option value="uffici">Uffici</option>
+                            <option value="scolastico">Scolastico</option>
+                            <option value="sanitario">Sanitario</option>
+                            <option value="altro">Altro</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="active" for="formDataPredisposizione">Data di predisposizione</label>
+                        <input class="form-control" type="date" id="formDataPredisposizione" name="formDataPredisposizione">
+                    </div>
+                    <div class="py-1">
+                        <div class="btn-example">
+                            <button type="button" class="btn btn-primary" id="btnSalvaPredisposizione">Salva Predisposizione Edificio</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
         </div>
 
-        <div id="map"></div>
+        <div id="sectionTfo">
+            <h2>REGISTRAZIONI DELLE TERMINAZIONI OTTICHE (TFO)</h2>
+            <hr/>
 
-        <div class="form-section">
-            <h3>Dettagli Edificio Selezionato</h3>
-            <form id="buildingForm">
-                <div class="form-group">
-                    <label class="active" for="formIndirizzo">Indirizzo (da mappa o da inserire)</label>
-                    <input type="text" class="form-control" id="formIndirizzo" placeholder="VIA, N.CIVICO, COMUNE (se non da mappa)">
+            <div class="form-section">
+                <h3>Edifici Predisposti</h3>
+                <p>Seleziona un edificio dalla tabella sottostante per aggiungere le relative TFO.</p>
+                 <div class="table-responsive">
+                    <table class="table table-striped" id="predisposizioniTable">
+                        <thead>
+                          <tr>
+                            <th scope="col">ID Edificio</th>
+                            <th scope="col">Indirizzo</th>
+                            <th scope="col">Comune</th>
+                            <th scope="col">Cod.Catastale</th>
+                            <th scope="col">Tipo Edificio</th>
+                            <th scope="col">Data Pred.</th>
+                          </tr>
+                        </thead>
+                        <tbody id="predisposizioniTableBody">
+                          </tbody>
+                    </table>
+                </div>
+                <div class="btn-example py-1">
+                    <button type="button" class="btn btn-success" id="btnShowAddTfo">Aggiungi TFO per Edificio Selezionato</button>
+                    <button type="button" class="btn btn-warning ms-2" id="btnModificaPredisposizione">Modifica Predisposizione</button>
+                    <button type="button" class="btn btn-danger ms-2" id="btnEliminaPredisposizione">Elimina Predisposizione</button>
+                </div>
+            </div>
+            <hr/>
+
+            <div class="form-section">
+                <h3 id="tfoSectionTitle">Terminazioni Ottiche (TFO)</h3>
+                 <div id="formTfoContainer" class="form-section">
+                    <h4 id="formTfoTitle">Aggiungi Nuova TFO</h4>
+                    <form id="tfoForm">
+                        <input type="hidden" id="formTfoRowIndex"> <input type="hidden" id="selectedPredisposizioneId"> <div class="form-group">
+                          <label class="active" for="formIndirizzoTfo">Indirizzo Edificio (da predisposizione)</label>
+                          <input type="text" class="form-control" id="formIndirizzoTfo" readonly>
+                        </div>
+                        <div class="row">
+                            <div class="form-group col-md-6">
+                                <label class="active" for="formLatitudineTfo">Latitudine (da predisposizione)</label>
+                                <input type="text" class="form-control" id="formLatitudineTfo" readonly>
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label class="active" for="formLongitudineTfo">Longitudine (da predisposizione)</label>
+                                <input type="text" class="form-control" id="formLongitudineTfo" readonly>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                          <label class="active" for="formCodiceCatastaleTfo">Codice Catastale Edificio (da predisposizione)</label>
+                          <input type="text" class="form-control" id="formCodiceCatastaleTfo" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="active" for="formDataPredisposizioneTfo">Data di Predisposizione TFO</label>
+                            <input class="form-control" type="date" id="formDataPredisposizioneTfo" name="formDataPredisposizioneTfo">
+                        </div>
+                        <div class="form-group">
+                          <label class="active" for="formScalaTfo">Scala</label>
+                          <input type="text" class="form-control" id="formScalaTfo" placeholder="Inserisci la scala">
+                        </div>
+                        <div class="form-group">
+                          <label class="active" for="formPianoTfo">Piano</label>
+                          <input type="text" class="form-control" id="formPianoTfo" placeholder="Inserisci il numero del piano">
+                        </div>
+                        <div class="form-group">
+                          <label class="active" for="formInternoTfo">Interno</label>
+                          <input type="text" class="form-control" id="formInternoTfo" placeholder="Inserisci l'interno">
+                        </div>
+                        <div class="form-group">
+                          <label class="active" for="formIdOperatoreTfo">Identificativo Operatore</label>
+                          <input type="text" class="form-control" id="formIdOperatoreTfo" placeholder="ID operatore telefonico">
+                        </div>
+                        <div class="form-group">
+                          <label class="active" for="formCodiceTfo">Codice Identificativo Terminazioni Ottiche</label>
+                          <input type="text" class="form-control" id="formCodiceTfo" placeholder="ES: T00231">
+                        </div>
+                        <div class="form-group">
+                          <label class="active" for="formCodiceRoeTfo">Codice Identificativo ROE</label>
+                          <input type="text" class="form-control" id="formCodiceRoeTfo" placeholder="ES: ROE_007">
+                        </div>
+                        <div class="btn-example py-3">
+                            <button type="button" class="btn btn-primary" id="btnSalvaTfo">Salva TFO</button>
+                            <button type="button" class="btn btn-secondary" id="btnAnnullaTfo">Annulla</button>
+                        </div>
+                    </form>
                 </div>
 
-                <div class="row">
-                    <div class="form-group col-md-6">
-                        <label class="active" for="formLatitudine">Latitudine (da mappa)</label>
-                        <input type="text" class="form-control" id="formLatitudine" readonly>
+                <div id="tfoTableContainer">
+                    <p>Nessun edificio predisposto selezionato o nessuna TFO ancora inserita per l'edificio selezionato.</p>
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="tfoTable" style="display:none;">
+                            <thead>
+                              <tr>
+                                <th scope="col">Scala</th>
+                                <th scope="col">Piano</th>
+                                <th scope="col">Interno</th>
+                                <th scope="col">Data predisposizione TFO</th>
+                                <th scope="col">ID Operatore</th>
+                                <th scope="col">Codice TFO</th>
+                                <th scope="col">Codice ROE</th>
+                              </tr>
+                            </thead>
+                            <tbody id="tfoTableBody">
+                              </tbody>
+                        </table>
                     </div>
-                    <div class="form-group col-md-6">
-                        <label class="active" for="formLongitudine">Longitudine (da mappa)</label>
-                        <input type="text" class="form-control" id="formLongitudine" readonly>
-                    </div>
-                </div>
-                 <div class="row">
-                    <div class="form-group col-md-6">
-                        <label class="active" for="formDbId">ID Database (da mappa)</label>
-                        <input type="text" class="form-control" id="formDbId" readonly>
-                    </div>
-                    <div class="form-group col-md-6">
-                        <label class="active" for="formObjectId">OBJECTID Originale (da mappa)</label>
-                        <input type="text" class="form-control" id="formObjectId" readonly>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="active" for="formEdifcUso">Uso Edificio (da mappa)</label>
-                    <input type="text" class="form-control" id="formEdifcUso" readonly>
-                </div>
-
-                <div class="form-group">
-                    <label class="active" for="formComune">Comune (per predisposizione)</label>
-                    <input type="text" class="form-control" id="formComune" placeholder="Inserisci il comune">
-                </div>
-                <div class="form-group">
-                    <label class="active" for="formCodiceBelfiore">Codice Belfiore comune (per predisposizione)</label>
-                    <input type="text" class="form-control" id="formCodiceBelfiore" placeholder="Inserisci il codice Belfiore">
-                </div>
-                <div class="form-group">
-                    <label class="active" for="formCodiceCatastale">Codice Catastale particella (per predisposizione)</label>
-                    <input type="text" class="form-control" id="formCodiceCatastale" placeholder="Inserisci il codice catastale">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label" for="formTipoEdificioSelect">Tipo Edificio (per predisposizione)</label>
-                    <select class="form-select form-select-sm" id="formTipoEdificioSelect">
-                        <option value="" selected disabled>Seleziona tipo</option>
-                        <option value="residenziale">Residenziale</option>
-                        <option value="commerciale">Commerciale</option>
-                        <option value="industriale">Industriale</option>
-                        <option value="uffici">Uffici</option>
-                        <option value="scolastico">Scolastico</option>
-                        <option value="sanitario">Sanitario</option>
-                        <option value="altro">Altro</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="active" for="formDataPredisposizione">Data di predisposizione</label>
-                    <input class="form-control" type="date" id="formDataPredisposizione" name="formDataPredisposizione">
-                </div>
-                <div class="py-1">
-                    <div class="btn-example">
-                        <button type="button" class="btn btn-primary" id="btnSalvaPredisposizione">Salva Predisposizione Edificio</button>
+                    <div class="btn-example py-1 mt-2" id="tfoActionButtons" style="display:none;">
+                        <button type="button" class="btn btn-warning btn-sm" id="btnModificaTfo">Modifica TFO Selezionata</button>
+                        <button type="button" class="btn btn-danger btn-sm" id="btnEliminaTfo">Elimina TFO Selezionata</button>
                     </div>
                 </div>
-            </form>
-        </div> </main>
+            </div>
+        </div>
+    </main>
 
     <footer class="it-footer">
         </footer>
 
-</div> <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
         crossorigin=""></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.6.1/dist/js/bootstrap-italia.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-italia@2.6.1/dist/js/bootstrap-italia.bundle.min.js"></script>
+<script src="js/map_logic.js"></script>
 
-    <script src="js/map_logic.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- Variabili Globali per le sezioni ---
+        const navEdifici = document.getElementById('navEdifici');
+        const navTfo = document.getElementById('navTfo');
+        const sectionEdifici = document.getElementById('sectionEdifici');
+        const sectionTfo = document.getElementById('sectionTfo');
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Inizializza la mappa (la funzione initMap() è definita in map_logic.js)
-            if (typeof initMap === 'function') {
-                initMap();
-            } else {
-                console.error("La funzione initMap() non è stata trovata. Assicurati che js/map_logic.js sia caricato correttamente.");
+        // --- Variabili Sezione Edifici ---
+        const buildingForm = document.getElementById('buildingForm');
+        const btnSalvaPredisposizione = document.getElementById('btnSalvaPredisposizione');
+        // Input del form edificio (per pre-popolare tabella predisposizioni)
+        const formIndirizzo = document.getElementById('formIndirizzo');
+        const formLatitudine = document.getElementById('formLatitudine');
+        const formLongitudine = document.getElementById('formLongitudine');
+        const formDbId = document.getElementById('formDbId'); // Usato come ID univoco per la predisposizione
+        const formObjectId = document.getElementById('formObjectId');
+        const formComune = document.getElementById('formComune');
+        const formCodiceCatastale = document.getElementById('formCodiceCatastale');
+        const formTipoEdificioSelect = document.getElementById('formTipoEdificioSelect');
+        const formDataPredisposizione = document.getElementById('formDataPredisposizione');
+
+
+        // --- Variabili Sezione TFO ---
+        // Gruppo Superiore
+        const predisposizioniTableBody = document.getElementById('predisposizioniTableBody');
+        const btnShowAddTfo = document.getElementById('btnShowAddTfo'); // Mostra il form per aggiungere TFO
+        const btnModificaPredisposizione = document.getElementById('btnModificaPredisposizione'); // NUOVO
+        const btnEliminaPredisposizione = document.getElementById('btnEliminaPredisposizione'); // NUOVO
+        let selectedPredisposizioneRow = null; // Riga selezionata nella tabella predisposizioni
+
+        // Gruppo Inferiore
+        const tfoSectionTitle = document.getElementById('tfoSectionTitle');
+        const formTfoContainer = document.getElementById('formTfoContainer');
+        const tfoForm = document.getElementById('tfoForm');
+        const formTfoTitle = document.getElementById('formTfoTitle');
+        const selectedPredisposizioneIdInput = document.getElementById('selectedPredisposizioneId'); // Hidden input
+        // Campi del form TFO da pre-popolare/leggere
+        const formIndirizzoTfo = document.getElementById('formIndirizzoTfo');
+        const formLatitudineTfo = document.getElementById('formLatitudineTfo');
+        const formLongitudineTfo = document.getElementById('formLongitudineTfo');
+        const formCodiceCatastaleTfo = document.getElementById('formCodiceCatastaleTfo');
+        const formDataPredisposizioneTfo = document.getElementById('formDataPredisposizioneTfo');
+        const formScalaTfo = document.getElementById('formScalaTfo');
+        const formPianoTfo = document.getElementById('formPianoTfo');
+        const formInternoTfo = document.getElementById('formInternoTfo');
+        const formIdOperatoreTfo = document.getElementById('formIdOperatoreTfo');
+        const formCodiceTfo = document.getElementById('formCodiceTfo');
+        const formCodiceRoeTfo = document.getElementById('formCodiceRoeTfo');
+        const formTfoRowIndex = document.getElementById('formTfoRowIndex'); // Per modifica TFO
+
+        const btnSalvaTfo = document.getElementById('btnSalvaTfo');
+        const btnAnnullaTfo = document.getElementById('btnAnnullaTfo');
+
+        const tfoTableContainer = document.getElementById('tfoTableContainer');
+        const tfoTable = document.getElementById('tfoTable');
+        const tfoTableBody = document.getElementById('tfoTableBody');
+        const tfoActionButtons = document.getElementById('tfoActionButtons');
+        const btnModificaTfo = document.getElementById('btnModificaTfo');
+        const btnEliminaTfo = document.getElementById('btnEliminaTfo');
+        let selectedTfoRow = null; // Riga selezionata nella tabella TFO
+
+        let tfoDataStore = {}; // Oggetto per memorizzare TFO per ID predisposizione: { "predispoId1": [tfo1, tfo2], ... }
+
+
+        // --- Inizializzazione Mappa ---
+        if (typeof initMap === 'function') {
+            initMap(); // map_logic.js
+        } else {
+            console.error("La funzione initMap() non è stata trovata.");
+        }
+        console.log("Applicazione Frontend Inizializzata.");
+
+        // --- Logica Navigazione Sezioni ---
+        function showSection(sectionToShow, navLinkToActivate) {
+            sectionEdifici.style.display = 'none';
+            sectionTfo.style.display = 'none';
+            navEdifici.classList.remove('active');
+            navTfo.classList.remove('active');
+
+            sectionToShow.style.display = 'block';
+            if (navLinkToActivate) navLinkToActivate.classList.add('active');
+            
+            formTfoContainer.style.display = 'none';
+            if (sectionToShow === sectionEdifici && typeof map !== 'undefined' && map.invalidateSize) {
+                 setTimeout(() => map.invalidateSize(), 0); // Invalida la mappa quando la sezione edifici è mostrata
             }
-            console.log("Applicazione Frontend Inizializzata.");
+        }
 
-            // Gestione base del submit del form edificio
-            const buildingForm = document.getElementById('buildingForm');
-            const btnSalvaPredisposizione = document.getElementById('btnSalvaPredisposizione');
+        navEdifici.addEventListener('click', (e) => {
+            e.preventDefault();
+            showSection(sectionEdifici, navEdifici);
+        });
 
-            if (btnSalvaPredisposizione && buildingForm) {
-                btnSalvaPredisposizione.addEventListener('click', function(event) {
-                    event.preventDefault(); // Impedisce il submit tradizionale se il bottone fosse type="submit"
+        navTfo.addEventListener('click', (e) => {
+            e.preventDefault();
+            showSection(sectionTfo, navTfo);
+        });
+        
+        showSection(sectionEdifici, navEdifici); // Mostra la sezione edifici di default
 
-                    const dbId = document.getElementById('formDbId').value;
-                    const objectId = document.getElementById('formObjectId').value;
-                    const indirizzo = document.getElementById('formIndirizzo').value;
-                    const dataPredisposizione = document.getElementById('formDataPredisposizione').value;
-                    const comune = document.getElementById('formComune').value;
-                    const codiceCatastale = document.getElementById('formCodiceCatastale').value;
+        // --- Logica Sezione Lista Edifici ---
+        if (btnSalvaPredisposizione && buildingForm) {
+            btnSalvaPredisposizione.addEventListener('click', function(event) {
+                event.preventDefault();
+                const dbId = formDbId.value;
+                const objectId = formObjectId.value;
+                const indirizzo = formIndirizzo.value;
+                const dataPred = formDataPredisposizione.value;
+                const comune = formComune.value;
+                const codCatastale = formCodiceCatastale.value;
+                const tipoEdificio = formTipoEdificioSelect.value;
+                const lat = formLatitudine.value;
+                const lon = formLongitudine.value;
+
+                if (!dbId && !objectId) {
+                    alert('Per favore, seleziona un edificio dalla mappa prima di salvare la predisposizione.');
+                    return;
+                }
+                if (!dataPred) {
+                    alert('Per favore, inserisci la Data di Predisposizione.');
+                    return;
+                }
+                if (!indirizzo) {
+                    alert('Indirizzo mancante.');
+                    return;
+                }
+                 if (!comune) {
+                    alert('Comune mancante.');
+                    return;
+                }
+
+                // Controllo se la predisposizione esiste già per evitare duplicati
+                const existingRow = document.querySelector(`#predisposizioniTableBody tr[data-id="${dbId || objectId}"]`);
+                if (existingRow) {
+                    alert('Questo edificio è già stato registrato come predisposto.');
+                    // Opzionalmente, aggiorna la riga esistente invece di dare errore
+                    // existingRow.cells[1].textContent = indirizzo;
+                    // existingRow.cells[2].textContent = comune;
+                    // existingRow.cells[3].textContent = codCatastale;
+                    // existingRow.cells[4].textContent = tipoEdificio;
+                    // existingRow.cells[5].textContent = dataPred;
+                    // existingRow.dataset.lat = lat; // Aggiorna lat/lon se necessario
+                    // existingRow.dataset.lon = lon;
+                    return;
+                }
 
 
-                    if (!dbId && !objectId) { // Controlla se un edificio è stato selezionato dalla mappa
-                        alert('Per favore, seleziona un edificio dalla mappa prima di salvare la predisposizione.');
-                        return;
-                    }
-                    if (!dataPredisposizione) {
-                        alert('Per favore, inserisci la Data di Predisposizione.');
-                        return;
-                    }
+                const predisposizioneData = {
+                    id: dbId || objectId, // Usa dbId o objectId come identificativo univoco
+                    indirizzo: indirizzo,
+                    lat: lat,
+                    lon: lon,
+                    comune: comune,
+                    codCatastale: codCatastale,
+                    tipoEdificio: tipoEdificio,
+                    dataPred: dataPred,
+                };
 
-                    const datiDaInviare = {
-                        id_database: dbId, // o usa objectId se quello è l'identificativo primario per l'aggiornamento
-                        object_id_originale: objectId,
-                        indirizzo_form: indirizzo, // L'indirizzo potrebbe non essere aggiornabile, ma lo raccogliamo
-                        data_predisposizione: dataPredisposizione,
-                        comune_predisposizione: comune,
-                        codice_catastale_predisposizione: codiceCatastale,
-                        tipo_edificio_predisposizione: document.getElementById('formTipoEdificioSelect').value,
-                        predisposto: true // Marcato come predisposto al salvataggio
-                        // Aggiungi altri campi se necessario
-                    };
+                // Aggiungi alla tabella predisposizioni
+                const newRow = predisposizioniTableBody.insertRow();
+                newRow.dataset.id = predisposizioneData.id;
+                newRow.dataset.indirizzo = predisposizioneData.indirizzo;
+                newRow.dataset.lat = predisposizioneData.lat;
+                newRow.dataset.lon = predisposizioneData.lon;
+                newRow.dataset.codCatastale = predisposizioneData.codCatastale;
+                
+                newRow.innerHTML = `
+                    <td>${predisposizioneData.id}</td>
+                    <td>${predisposizioneData.indirizzo}</td>
+                    <td>${predisposizioneData.comune}</td>
+                    <td>${predisposizioneData.codCatastale}</td>
+                    <td>${predisposizioneData.tipoEdificio}</td>
+                    <td>${predisposizioneData.dataPred}</td>
+                `;
+                
+                // Inizializza lo store per le TFO di questa predisposizione se non esiste
+                if (!tfoDataStore[predisposizioneData.id]) {
+                    tfoDataStore[predisposizioneData.id] = [];
+                }
 
-                    console.log("Dati predisposizione da inviare:", datiDaInviare);
-                    alert(`Simulazione invio dati per edificio ID DB: ${dbId} / OBJECTID: ${objectId}. Dati: ${JSON.stringify(datiDaInviare)}`);
+                alert(`Edificio ID: ${predisposizioneData.id} registrato come predisposto e aggiunto alla tabella.`);
+                buildingForm.reset(); // Pulisci il form edifici
+            });
+        }
 
-                    // Qui, in una fase successiva, chiameresti una funzione da api.js per inviare i dati al backend:
-                    // Esempio:
-                    // updateBuildingOnServer(dbId, {
-                    //     predisposto: true,
-                    //     data_predisposizione: dataPredisposizione,
-                    //     // ...altri campi aggiornabili...
-                    // }).then(updatedBuilding => {
-                    //     if (updatedBuilding) {
-                    //         alert('Edificio aggiornato con successo!');
-                    //         // Potresti ricaricare i dati sulla mappa o aggiornare lo stile del singolo edificio
-                    //     } else {
-                    //         alert("Errore durante l'aggiornamento dell'edificio.");
-                    //     }
-                    // });
-                });
+        // --- Logica Sezione Lista TFO ---
+
+        // Selezione riga nella tabella predisposizioni
+        predisposizioniTableBody.addEventListener('click', (event) => {
+            const row = event.target.closest('tr');
+            if (!row) return;
+
+            if (selectedPredisposizioneRow) {
+                selectedPredisposizioneRow.classList.remove('selected');
+            }
+            if (selectedPredisposizioneRow === row) { // Deseleziona se clicchi la stessa riga
+                selectedPredisposizioneRow = null;
+                tfoTableContainer.querySelector('p').textContent = "Nessun edificio predisposto selezionato.";
+                tfoTable.style.display = 'none';
+                tfoActionButtons.style.display = 'none';
+                tfoTableBody.innerHTML = ''; // Pulisci tabella TFO
+                formTfoContainer.style.display = 'none'; // Nascondi form TFO
+                tfoSectionTitle.textContent = 'Terminazioni Ottiche (TFO)';
+            } else {
+                selectedPredisposizioneRow = row;
+                selectedPredisposizioneRow.classList.add('selected');
+                const predispoId = selectedPredisposizioneRow.dataset.id;
+                const predispoAddr = selectedPredisposizioneRow.dataset.indirizzo;
+                tfoSectionTitle.textContent = `Terminazioni Ottiche (TFO) per: ${predispoAddr || predispoId}`;
+                
+                loadTfosForPredisposizione(predispoId);
+                formTfoContainer.style.display = 'none'; // Nascondi form TFO se era aperto
             }
         });
-    </script>
+
+        function loadTfosForPredisposizione(predispoId) {
+            tfoTableBody.innerHTML = ''; // Pulisci la tabella TFO
+            const tfos = tfoDataStore[predispoId] || [];
+
+            if (tfos.length > 0) {
+                tfos.forEach(data => addTfoToTable(data, predispoId, false)); // false per non salvare di nuovo nello store
+                tfoTableContainer.querySelector('p').style.display = 'none';
+                tfoTable.style.display = '';
+                tfoActionButtons.style.display = '';
+            } else {
+                tfoTableContainer.querySelector('p').textContent = "Nessuna TFO ancora inserita per l'edificio selezionato.";
+                tfoTableContainer.querySelector('p').style.display = 'block';
+                tfoTable.style.display = 'none';
+                tfoActionButtons.style.display = 'none';
+            }
+            selectedTfoRow = null; // Deseleziona qualsiasi TFO precedente
+            if(tfoTable.querySelector('.selected')) tfoTable.querySelector('.selected').classList.remove('selected');
+        }
+        
+        // Mostra il form per "Aggiungi TFO"
+        btnShowAddTfo.addEventListener('click', () => {
+            if (!selectedPredisposizioneRow) {
+                alert('Per favore, seleziona un Edificio Predisposto dalla tabella prima di aggiungere una TFO.');
+                return;
+            }
+            showTfoFormInternal('add');
+        });
+
+        // NUOVO: Event Listener per "Modifica Predisposizione"
+        btnModificaPredisposizione.addEventListener('click', () => {
+            if (!selectedPredisposizioneRow) {
+                alert('Per favore, seleziona un Edificio Predisposto dalla tabella da modificare.');
+                return;
+            }
+            // Popola il form edifici con i dati della riga selezionata
+            formIndirizzo.value = selectedPredisposizioneRow.cells[1].textContent;
+            formComune.value = selectedPredisposizioneRow.cells[2].textContent;
+            formCodiceCatastale.value = selectedPredisposizioneRow.cells[3].textContent;
+            formTipoEdificioSelect.value = selectedPredisposizioneRow.cells[4].textContent;
+            formDataPredisposizione.value = selectedPredisposizioneRow.cells[5].textContent;
+            
+            // Recupera gli altri dati necessari se li hai salvati nei dataset della riga
+            formDbId.value = selectedPredisposizioneRow.dataset.id;
+            formLatitudine.value = selectedPredisposizioneRow.dataset.lat || '';
+            formLongitudine.value = selectedPredisposizioneRow.dataset.lon || '';
+            // objectId e edifc_uso potrebbero non essere direttamente nella tabella predisposizioni
+            // Potresti doverli recuperare da un data store se necessario per la modifica
+            
+            alert("Modulo registrazione edifici pre-compilato. Modifica i dati e salva.");
+            showSection(sectionEdifici, navEdifici); // Vai alla sezione edifici
+            // Dovrai modificare la logica di btnSalvaPredisposizione per GESTIRE L'UPDATE
+            // invece di creare sempre una nuova riga.
+        });
+
+        // NUOVO: Event Listener per "Elimina Predisposizione"
+        btnEliminaPredisposizione.addEventListener('click', () => {
+            if (!selectedPredisposizioneRow) {
+                alert('Per favore, seleziona un Edificio Predisposto dalla tabella da eliminare.');
+                return;
+            }
+            if (confirm('Sei sicuro di voler eliminare questa predisposizione e tutte le TFO associate? L\'azione è irreversibile.')) {
+                const predispoIdToDelete = selectedPredisposizioneRow.dataset.id;
+                
+                // Rimuovi dallo store TFO
+                if (tfoDataStore[predispoIdToDelete]) {
+                    delete tfoDataStore[predispoIdToDelete];
+                    console.log(`TFOs per l'edificio ID ${predispoIdToDelete} eliminate dallo store.`);
+                }
+                
+                // Rimuovi la riga dalla tabella predisposizioni
+                selectedPredisposizioneRow.remove();
+                selectedPredisposizioneRow = null;
+                
+                // Pulisci la tabella TFO se quella eliminata era visualizzata
+                tfoTableBody.innerHTML = '';
+                tfoTableContainer.querySelector('p').textContent = "Nessun edificio predisposto selezionato.";
+                tfoTableContainer.querySelector('p').style.display = 'block';
+                tfoTable.style.display = 'none';
+                tfoActionButtons.style.display = 'none';
+                tfoSectionTitle.textContent = 'Terminazioni Ottiche (TFO)';
+
+                alert(`Predisposizione edificio ID ${predispoIdToDelete} eliminata.`);
+            }
+        });
+
+
+        function clearTfoForm() {
+            tfoForm.reset();
+            formTfoRowIndex.value = ''; // Per la modifica
+            formTfoTitle.textContent = 'Aggiungi Nuova TFO';
+        }
+
+        function showTfoFormInternal(mode = 'add', tfoDataToEdit = null, rowIndex = null) {
+            clearTfoForm();
+            const predispoId = selectedPredisposizioneRow.dataset.id;
+            const predispoAddr = selectedPredisposizioneRow.dataset.indirizzo;
+            const predispoLat = selectedPredisposizioneRow.dataset.lat;
+            const predispoLon = selectedPredisposizioneRow.dataset.lon;
+            const predispoCatasto = selectedPredisposizioneRow.dataset.codCatastale;
+
+            selectedPredisposizioneIdInput.value = predispoId; // Imposta l'ID della predisposizione
+            formIndirizzoTfo.value = predispoAddr || '';
+            formLatitudineTfo.value = predispoLat || '';
+            formLongitudineTfo.value = predispoLon || '';
+            formCodiceCatastaleTfo.value = predispoCatasto || '';
+
+            if (mode === 'edit' && tfoDataToEdit) {
+                formTfoTitle.textContent = 'Modifica TFO';
+                formDataPredisposizioneTfo.value = tfoDataToEdit.dataPredTFO;
+                formScalaTfo.value = tfoDataToEdit.scala;
+                formPianoTfo.value = tfoDataToEdit.piano;
+                formInternoTfo.value = tfoDataToEdit.interno;
+                formIdOperatoreTfo.value = tfoDataToEdit.operatore;
+                formCodiceTfo.value = tfoDataToEdit.codiceTfo;
+                formCodiceRoeTfo.value = tfoDataToEdit.codiceRoe;
+                formTfoRowIndex.value = rowIndex;
+            } else {
+                 formTfoTitle.textContent = `Aggiungi Nuova TFO per: ${predispoAddr || predispoId}`;
+            }
+            formTfoContainer.style.display = 'block';
+        }
+
+        btnAnnullaTfo.addEventListener('click', () => {
+            formTfoContainer.style.display = 'none';
+            clearTfoForm();
+        });
+
+        btnSalvaTfo.addEventListener('click', () => {
+            const currentPredispoId = selectedPredisposizioneIdInput.value;
+            if (!currentPredispoId) {
+                alert("Errore: ID edificio predisposto non trovato.");
+                return;
+            }
+
+            const tfoData = {
+                // Non più indirizzo, lat, lon, catastale TFO perché presi da predisposizione
+                dataPredTFO: formDataPredisposizioneTfo.value,
+                scala: formScalaTfo.value,
+                piano: formPianoTfo.value,
+                interno: formInternoTfo.value,
+                operatore: formIdOperatoreTfo.value,
+                codiceTfo: formCodiceTfo.value,
+                codiceRoe: formCodiceRoeTfo.value,
+            };
+            
+            // Validazione base
+            if (!tfoData.dataPredTFO || !tfoData.codiceTfo) {
+                alert("Per favore, compila almeno Data Predisposizione TFO e Codice TFO.");
+                return;
+            }
+
+            const rowIndexToEdit = formTfoRowIndex.value;
+
+            if (rowIndexToEdit !== '') { // Modalità Modifica
+                const tfoIndex = parseInt(rowIndexToEdit);
+                tfoDataStore[currentPredispoId][tfoIndex] = tfoData; // Aggiorna nello store
+                // Aggiorna la riga nella tabella
+                const row = tfoTableBody.rows[tfoIndex];
+                 row.cells[0].textContent = tfoData.scala;
+                row.cells[1].textContent = tfoData.piano;
+                row.cells[2].textContent = tfoData.interno;
+                row.cells[3].textContent = tfoData.dataPredTFO;
+                row.cells[4].textContent = tfoData.operatore;
+                row.cells[5].textContent = tfoData.codiceTfo;
+                row.cells[6].textContent = tfoData.codiceRoe;
+                row.classList.remove('selected');
+                selectedTfoRow = null;
+            } else { // Modalità Aggiungi
+                addTfoToTable(tfoData, currentPredispoId, true); // true per salvare nello store
+            }
+
+            formTfoContainer.style.display = 'none';
+            clearTfoForm();
+            
+            // Ricarica la tabella per riflettere le modifiche/aggiunte
+            // Assicurati che loadTfosForPredisposizione esista e sia chiamata correttamente
+            // o che la logica per aggiornare la UI sia qui
+            const tfos = tfoDataStore[currentPredispoId] || []; // Prendi i TFO aggiornati
+            if (tfos.length > 0) {
+                 tfoTableContainer.querySelector('p').style.display = 'none';
+                 tfoTable.style.display = '';
+                 tfoActionButtons.style.display = '';
+            } else { // Se dopo la modifica/aggiunta non ci sono più TFO (improbabile per aggiunta)
+                 tfoTableContainer.querySelector('p').textContent = "Nessuna TFO ancora inserita per l'edificio selezionato.";
+                 tfoTableContainer.querySelector('p').style.display = 'block';
+                 tfoTable.style.display = 'none';
+                 tfoActionButtons.style.display = 'none';
+            }
+            alert('TFO salvata!');
+        });
+
+        function addTfoToTable(data, predispoId, saveToStore = true) {
+             if (saveToStore) {
+                if (!tfoDataStore[predispoId]) {
+                    tfoDataStore[predispoId] = [];
+                }
+                tfoDataStore[predispoId].push(data);
+            }
+
+            const newRow = tfoTableBody.insertRow();
+            // newRow.dataset.predispoId = predispoId; // Utile per debug o filtraggi futuri
+            newRow.innerHTML = `
+                <td>${data.scala}</td>
+                <td>${data.piano}</td>
+                <td>${data.interno}</td>
+                <td>${data.dataPredTFO}</td>
+                <td>${data.operatore}</td>
+                <td>${data.codiceTfo}</td>
+                <td>${data.codiceRoe}</td>
+            `;
+             tfoTableContainer.querySelector('p').style.display = 'none';
+             tfoTable.style.display = '';
+             tfoActionButtons.style.display = '';
+        }
+        
+        // Selezione riga Tabella TFO
+        tfoTableBody.addEventListener('click', (event) => {
+            const row = event.target.closest('tr');
+            if (!row) return;
+
+            if (selectedTfoRow) {
+                selectedTfoRow.classList.remove('selected');
+            }
+            if (selectedTfoRow === row) {
+                selectedTfoRow = null;
+            } else {
+                selectedTfoRow = row;
+                selectedTfoRow.classList.add('selected');
+            }
+        });
+
+        btnModificaTfo.addEventListener('click', () => {
+            if (!selectedTfoRow) {
+                alert('Seleziona una riga TFO da modificare.');
+                return;
+            }
+             if (!selectedPredisposizioneRow) { // Controllo di sicurezza
+                alert('Nessun edificio predisposto selezionato.');
+                return;
+            }
+            const currentPredispoId = selectedPredisposizioneRow.dataset.id;
+            const tfoIndex = selectedTfoRow.rowIndex -1; // -1 per l'header
+            const tfoDataToEdit = tfoDataStore[currentPredispoId][tfoIndex];
+            showTfoFormInternal('edit', tfoDataToEdit, tfoIndex);
+        });
+
+        btnEliminaTfo.addEventListener('click', () => {
+            if (!selectedTfoRow) {
+                alert('Seleziona una riga TFO da eliminare.');
+                return;
+            }
+             if (!selectedPredisposizioneRow) { // Controllo di sicurezza
+                alert('Nessun edificio predisposto selezionato.');
+                return;
+            }
+
+            if (confirm('Sei sicuro di voler eliminare questa TFO?')) {
+                const currentPredispoId = selectedPredisposizioneRow.dataset.id;
+                const tfoIndex = selectedTfoRow.rowIndex - 1; // -1 per l'header
+                
+                tfoDataStore[currentPredispoId].splice(tfoIndex, 1); // Rimuovi dallo store
+                tfoTableBody.deleteRow(tfoIndex); // Rimuovi dalla tabella
+                selectedTfoRow = null;
+
+                if (tfoDataStore[currentPredispoId].length === 0) {
+                    tfoTableContainer.querySelector('p').textContent = "Nessuna TFO ancora inserita per l'edificio selezionato.";
+                    tfoTableContainer.querySelector('p').style.display = 'block';
+                    tfoTable.style.display = 'none';
+                    tfoActionButtons.style.display = 'none';
+                }
+            }
+        });
+    });
+</script>
 
 </body>
 </html>
