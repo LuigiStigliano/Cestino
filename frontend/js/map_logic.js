@@ -190,9 +190,6 @@ function loadBuildingsDataByBounds() {
                         popupContent += '<strong>Coordinate:</strong> ' + center.lat.toFixed(8) + ', ' + center.lng.toFixed(8) + '<br>';
                     }
                     
-                    // Predisposto fibra
-                    popupContent += '<strong>Predisposto Fibra:</strong> ' + (feature.properties.predisposto_fibra ? 'Sì' : 'No') + '<br>';
-                    
                     popupContent += '</div>';
                     
                     layer.bindPopup(popupContent);
