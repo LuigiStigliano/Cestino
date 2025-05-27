@@ -122,6 +122,7 @@
         <div id="sectionEdifici">
             <div class="form-section">
                 <h2>Registrazione degli Edifici Predisposti alla Banda Ultralarga</h2>
+                <br>
                 <p>Clicca su un edificio nella mappa per popolarne i dati, poi compila i campi mancanti per registrarlo come predisposto.</p>
                 <br>
             </div>
@@ -130,59 +131,47 @@
 
             <div class="form-section">
                 <h3>Dettagli Edificio Selezionato</h3>
+                <br>
                 <form id="buildingForm">
                     <div class="form-group">
-                        <label class="active" for="formIndirizzo">Indirizzo (da mappa o da inserire)</label>
-                        <input type="text" class="form-control" id="formIndirizzo" placeholder="VIA, N.CIVICO, COMUNE (se non da mappa)">
+                        <label class="active" for="formIndirizzo">Nome Edificio / Indirizzo</label>
+                        <input type="text" class="form-control" id="formIndirizzo" placeholder="VIA, N.CIVICO, COMUNE">
                     </div>
                     <div class="row">
                         <div class="form-group col-md-6">
-                            <label class="active" for="formLatitudine">Latitudine (da mappa)</label>
+                            <label class="active" for="formLatitudine">Latitudine</label>
                             <input type="text" class="form-control" id="formLatitudine" readonly>
                         </div>
                         <div class="form-group col-md-6">
-                            <label class="active" for="formLongitudine">Longitudine (da mappa)</label>
+                            <label class="active" for="formLongitudine">Longitudine</label>
                             <input type="text" class="form-control" id="formLongitudine" readonly>
                         </div>
                     </div>
                      <div class="row">
                         <div class="form-group col-md-6">
-                            <label class="active" for="formDbId">ID Database (da mappa)</label>
+                            <label class="active" for="formDbId">ID Database</label>
                             <input type="text" class="form-control" id="formDbId" readonly>
                         </div>
                         <div class="form-group col-md-6">
-                            <label class="active" for="formObjectId">OBJECTID Originale (da mappa)</label>
+                            <label class="active" for="formObjectId">OBJECTID Originale</label>
                             <input type="text" class="form-control" id="formObjectId" readonly>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="active" for="formEdifcUso">Uso Edificio (da mappa)</label>
+                        <label class="active" for="formEdifcUso">Uso Edificio</label>
                         <input type="text" class="form-control" id="formEdifcUso" readonly>
                     </div>
                     <div class="form-group">
-                        <label class="active" for="formComune">Comune (per predisposizione)</label>
+                        <label class="active" for="formComune">Comune</label>
                         <input type="text" class="form-control" id="formComune" placeholder="Inserisci il comune">
                     </div>
                     <div class="form-group">
-                        <label class="active" for="formCodiceBelfiore">Codice Belfiore comune (per predisposizione)</label>
+                        <label class="active" for="formCodiceBelfiore">Codice Belfiore comune</label>
                         <input type="text" class="form-control" id="formCodiceBelfiore" placeholder="Inserisci il codice Belfiore">
                     </div>
                     <div class="form-group">
-                        <label class="active" for="formCodiceCatastale">Codice Catastale particella (per predisposizione)</label>
+                        <label class="active" for="formCodiceCatastale">Codice Catastale particella</label>
                         <input type="text" class="form-control" id="formCodiceCatastale" placeholder="Inserisci il codice catastale">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="formTipoEdificioSelect">Tipo Edificio (per predisposizione)</label>
-                        <select class="form-select form-select-sm" id="formTipoEdificioSelect">
-                            <option value="" selected disabled>Seleziona tipo</option>
-                            <option value="residenziale">Residenziale</option>
-                            <option value="commerciale">Commerciale</option>
-                            <option value="industriale">Industriale</option>
-                            <option value="uffici">Uffici</option>
-                            <option value="scolastico">Scolastico</option>
-                            <option value="sanitario">Sanitario</option>
-                            <option value="altro">Altro</option>
-                        </select>
                     </div>
                     <div class="form-group">
                         <label class="active" for="formDataPredisposizione">Data di predisposizione</label>
