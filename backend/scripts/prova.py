@@ -9,13 +9,13 @@ import psycopg2
 from psycopg2.extras import execute_values
 import sys
 import os
-from dotenv import load_dotenv # Aggiunto
+from dotenv import load_dotenv
 
-# Carica variabili da .env che si trova due cartelle sopra (nella root di backend/)
+# Carica variabili da .env
 dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 load_dotenv(dotenv_path=dotenv_path)
 
-# Configurazione database da variabili d'ambiente
+# Configurazione database
 DB_CONFIG = {
     'host': os.getenv("POSTGRES_HOST", "localhost"),
     'database': os.getenv("POSTGRES_DB", "aquila_gis"),
@@ -24,8 +24,7 @@ DB_CONFIG = {
 }
 
 def create_table_if_not_exists(cursor):
-    """Crea la tabella per le abitazioni del catasto (inclusa la colonna centroide) e gli indici spaziali"""
-    # Definizione tabella e indici invariata dal tuo prova.py
+    """Crea le tabelle principali e secondarie"""
     create_table_sql = """
     CREATE TABLE IF NOT EXISTS catasto_abitazioni (
         id SERIAL PRIMARY KEY,
@@ -44,7 +43,8 @@ def create_table_if_not_exists(cursor):
         shape_area NUMERIC,
         geometry GEOMETRY(MULTIPOLYGONZ, 4326),
         centroide GEOMETRY(POINT, 4326),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        predisposto_fibra BOOLEAN
     );
     """
     create_index_sql = """
@@ -53,12 +53,43 @@ def create_table_if_not_exists(cursor):
     CREATE INDEX IF NOT EXISTS idx_catasto_abitazioni_centroide
       ON catasto_abitazioni USING GIST (centroide);
     """
+    create_verifica_sql = """
+    CREATE TABLE IF NOT EXISTS verifiche_edifici (
+        id SERIAL PRIMARY KEY,
+        id_edificio INTEGER REFERENCES catasto_abitazioni(id),
+        predisposto_fibra BOOLEAN NOT NULL,
+        note TEXT,
+        data_verifica TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        operatore TEXT
+    );
+    """
     cursor.execute(create_table_sql)
     cursor.execute(create_index_sql)
-    print("✓ Tabella 'catasto_abitazioni' creata/verificata con indici")
+    cursor.execute(create_verifica_sql)
+    print("✓ Tabelle create/verificate con indici")
+
+def create_trigger(cursor):
+    cursor.execute("""
+    CREATE OR REPLACE FUNCTION aggiorna_predisposto_fibra()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      UPDATE catasto_abitazioni
+      SET predisposto_fibra = NEW.predisposto_fibra
+      WHERE id = NEW.id_edificio;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    """)
+
+    cursor.execute("""
+    CREATE TRIGGER trg_aggiorna_predisposto_fibra
+    AFTER INSERT ON verifiche_edifici
+    FOR EACH ROW
+    EXECUTE FUNCTION aggiorna_predisposto_fibra();
+    """)
+    print("✓ Trigger predisposto_fibra creato")
 
 def load_geojson_file(file_path):
-    """Carica il file GeoJSON"""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -70,8 +101,6 @@ def load_geojson_file(file_path):
         sys.exit(1)
 
 def insert_features(cursor, features):
-    """Inserisce le features del GeoJSON nel database e restituisce il conteggio"""
-    # Logica di inserimento invariata dal tuo prova.py
     data_to_insert = []
     for feature in features:
         props = feature.get('properties', {})
@@ -129,7 +158,6 @@ def insert_features(cursor, features):
     return len(data_to_insert)
 
 def main():
-    # Modifica percorso per aquila.geojson
     geojson_file_path = os.path.join(os.path.dirname(__file__), "..", "data", "aquila.geojson")
 
     if not os.path.exists(geojson_file_path):
@@ -142,9 +170,12 @@ def main():
         cursor = conn.cursor()
 
         cursor.execute("CREATE EXTENSION IF NOT EXISTS postgis;")
-        print("🗑️ Drop della tabella 'catasto_abitazioni' (se esiste)…")
+        print("🗑️ Drop della tabella 'catasto_abitazioni'…")
+        cursor.execute("DROP TABLE IF EXISTS verifiche_edifici CASCADE;")
         cursor.execute("DROP TABLE IF EXISTS catasto_abitazioni CASCADE;")
+
         create_table_if_not_exists(cursor)
+        create_trigger(cursor)
 
         print(f"📖 Caricamento file {geojson_file_path}…")
         geojson_data = load_geojson_file(geojson_file_path)
@@ -162,13 +193,6 @@ def main():
         cursor.execute("SELECT COUNT(*) FROM catasto_abitazioni;")
         total = cursor.fetchone()[0]
         print(f"📈 Totale record nella tabella: {total}")
-
-        cursor.execute("""
-            SELECT edifc_uso, COUNT(*)
-            FROM catasto_abitazioni
-            GROUP BY edifc_uso
-            ORDER BY COUNT(*) DESC;
-        """)
 
     except psycopg2.Error as e:
         print(f"❌ Errore database: {e}")
