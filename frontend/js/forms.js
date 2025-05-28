@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const formComune = document.getElementById('formComune');
     const formCodiceCatastale = document.getElementById('formCodiceCatastale');
     const formDataPredisposizione = document.getElementById('formDataPredisposizione');
+    const formEdifcUso = document.getElementById('formEdifcUso');
 
 
     // --- Variabili Sezione TFO ---
@@ -66,310 +67,332 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- Logica Navigazione Sezioni ---
     function showSection(sectionToShow, navLinkToActivate) {
-        sectionEdifici.style.display = 'none';
-        sectionTfo.style.display = 'none';
-        navEdifici.classList.remove('active');
-        navTfo.classList.remove('active');
+        sectionEdifici.style.display = 'none'; //
+        sectionTfo.style.display = 'none'; //
+        navEdifici.classList.remove('active'); //
+        navTfo.classList.remove('active'); //
 
-        sectionToShow.style.display = 'block';
-        if (navLinkToActivate) navLinkToActivate.classList.add('active');
+        sectionToShow.style.display = 'block'; //
+        if (navLinkToActivate) navLinkToActivate.classList.add('active'); //
 
-        formTfoContainer.style.display = 'none';
-        if (sectionToShow === sectionEdifici && typeof map !== 'undefined' && map.invalidateSize) {
-                setTimeout(() => map.invalidateSize(), 0);
+        formTfoContainer.style.display = 'none'; //
+        if (sectionToShow === sectionEdifici && typeof map !== 'undefined' && map.invalidateSize) { //
+                setTimeout(() => map.invalidateSize(), 0); //
         }
     }
 
-    navEdifici.addEventListener('click', (e) => {
-        e.preventDefault();
-        showSection(sectionEdifici, navEdifici);
+    navEdifici.addEventListener('click', (e) => { //
+        e.preventDefault(); //
+        showSection(sectionEdifici, navEdifici); //
     });
 
-    navTfo.addEventListener('click', (e) => {
-        e.preventDefault();
-        showSection(sectionTfo, navTfo);
+    navTfo.addEventListener('click', (e) => { //
+        e.preventDefault(); //
+        showSection(sectionTfo, navTfo); //
     });
 
-    showSection(sectionEdifici, navEdifici);
+    showSection(sectionEdifici, navEdifici); //
 
     // --- Logica Sezione Lista Edifici ---
-    if (btnSalvaPredisposizione && buildingForm) {
-        btnSalvaPredisposizione.addEventListener('click', function(event) {
-            event.preventDefault();
-            const dbId = formDbId.value;
-            const objectId = formObjectId.value;
-            const indirizzo = formIndirizzo.value;
-            const dataPred = formDataPredisposizione.value;
-            const comune = formComune.value;
-            const codCatastale = formCodiceCatastale.value;
-            const lat = formLatitudine.value;
-            const lon = formLongitudine.value;
+    if (btnSalvaPredisposizione && buildingForm) { //
+        btnSalvaPredisposizione.addEventListener('click', function(event) { //
+            event.preventDefault(); //
+            const dbId = formDbId.value; //
+            const objectId = formObjectId.value; //
+            const indirizzo = formIndirizzo.value; //
+            const dataPred = formDataPredisposizione.value; //
+            const comune = formComune.value; //
+            const codCatastale = formCodiceCatastale.value; //
+            const lat = formLatitudine.value; //
+            const lon = formLongitudine.value; //
 
-            if (!dbId && !objectId) {
-                alert('Per favore, seleziona un edificio dalla mappa prima di salvare la predisposizione.');
-                return;
+            if (!dbId && !objectId) { //
+                alert('Per favore, seleziona un edificio dalla mappa prima di salvare la predisposizione.'); //
+                return; //
             }
-            if (!dataPred) {
-                alert('Per favore, inserisci la Data di Predisposizione.');
-                return;
+            if (!dataPred) { //
+                alert('Per favore, inserisci la Data di Predisposizione.'); //
+                return; //
             }
-            if (!indirizzo) {
-                alert('Indirizzo mancante.');
-                return;
+            if (!indirizzo) { //
+                alert('Indirizzo mancante.'); //
+                return; //
             }
-            if (!comune) {
-                alert('Comune mancante.');
-                return;
+            if (!comune) { //
+                alert('Comune mancante.'); //
+                return; //
             }
 
-            const uniqueId = dbId || objectId;
-            const existingRow = document.querySelector(`#predisposizioniTableBody tr[data-id="${uniqueId}"]`);
-            if (existingRow) {
-                alert('Questo edificio è già stato registrato come predisposto.');
-                return;
-            }
+            const uniqueId = dbId || objectId; //
+            const existingRow = document.querySelector(`#predisposizioniTableBody tr[data-id="${uniqueId}"]`); //
 
             const predisposizioneData = {
-                id: uniqueId,
-                indirizzo: indirizzo,
-                lat: lat,
-                lon: lon,
-                comune: comune,
-                codCatastale: codCatastale,
-                dataPred: dataPred,
+                id: uniqueId, //
+                indirizzo: indirizzo, //
+                lat: lat, //
+                lon: lon, //
+                comune: comune, //
+                codCatastale: codCatastale, //
+                dataPred: dataPred, //
             };
 
-            const newRow = predisposizioniTableBody.insertRow();
-            newRow.dataset.id = predisposizioneData.id;
-            newRow.dataset.indirizzo = predisposizioneData.indirizzo;
-            newRow.dataset.lat = predisposizioneData.lat;
-            newRow.dataset.lon = predisposizioneData.lon;
-            newRow.dataset.codCatastale = predisposizioneData.codCatastale;
-            newRow.innerHTML = `
-                <td>${predisposizioneData.id}</td>
-                <td>${predisposizioneData.indirizzo}</td>
-                <td>${predisposizioneData.comune}</td>
-                <td>${predisposizioneData.codCatastale}</td>
-                <td>${predisposizioneData.dataPred}</td>
-            `;
-
-            if (!tfoDataStore[predisposizioneData.id]) {
-                tfoDataStore[predisposizioneData.id] = [];
-            }
-
-            if (typeof window.markBuildingAsPredispostoOnMap === 'function') {
-                window.markBuildingAsPredispostoOnMap(predisposizioneData.id);
+            if (existingRow) { //
+                // --- NUOVA LOGICA DI MODIFICA ---
+                existingRow.dataset.indirizzo = predisposizioneData.indirizzo; //
+                existingRow.dataset.lat = predisposizioneData.lat; //
+                existingRow.dataset.lon = predisposizioneData.lon; //
+                existingRow.dataset.codCatastale = predisposizioneData.codCatastale; //
+                // Aggiorna le celle della tabella
+                existingRow.cells[1].textContent = predisposizioneData.indirizzo;
+                existingRow.cells[2].textContent = predisposizioneData.comune;
+                existingRow.cells[3].textContent = predisposizioneData.codCatastale;
+                existingRow.cells[4].textContent = predisposizioneData.dataPred;
+                alert(`Predisposizione edificio ID: ${predisposizioneData.id} modificata con successo.`);
+                // --- FINE LOGICA DI MODIFICA ---
             } else {
-                console.error("Funzione markBuildingAsPredispostoOnMap non trovata.");
+                // --- LOGICA DI AGGIUNTA ESISTENTE ---
+                const newRow = predisposizioniTableBody.insertRow(); //
+                newRow.dataset.id = predisposizioneData.id; //
+                newRow.dataset.indirizzo = predisposizioneData.indirizzo; //
+                newRow.dataset.lat = predisposizioneData.lat; //
+                newRow.dataset.lon = predisposizioneData.lon; //
+                newRow.dataset.codCatastale = predisposizioneData.codCatastale; //
+                newRow.innerHTML = `
+                    <td>${predisposizioneData.id}</td>
+                    <td>${predisposizioneData.indirizzo}</td>
+                    <td>${predisposizioneData.comune}</td>
+                    <td>${predisposizioneData.codCatastale}</td>
+                    <td>${predisposizioneData.dataPred}</td>
+                `; //
+
+                if (!tfoDataStore[predisposizioneData.id]) { //
+                    tfoDataStore[predisposizioneData.id] = []; //
+                }
+
+                if (typeof window.markBuildingAsPredispostoOnMap === 'function') { //
+                    window.markBuildingAsPredispostoOnMap(predisposizioneData.id); //
+                } else {
+                    console.error("Funzione markBuildingAsPredispostoOnMap non trovata."); //
+                }
+
+                alert(`Edificio ID: ${predisposizioneData.id} registrato come predisposto e aggiunto alla tabella.`); //
+                 // --- FINE LOGICA DI AGGIUNTA ESISTENTE ---
             }
 
-            alert(`Edificio ID: ${predisposizioneData.id} registrato come predisposto e aggiunto alla tabella.`);
-            buildingForm.reset();
+            // Pulisci il form dopo il salvataggio (aggiunta pulizia campi ID e coordinate)
+            buildingForm.reset(); //
+            formDbId.value = ''; //
+            formObjectId.value = ''; //
+            formLatitudine.value = ''; //
+            formLongitudine.value = ''; //
+            formEdifcUso.value = ''; //
+
         });
     }
 
     // --- Logica Sezione Lista TFO ---
-    predisposizioniTableBody.addEventListener('click', (event) => {
-        const row = event.target.closest('tr');
-        if (!row) return;
+    predisposizioniTableBody.addEventListener('click', (event) => { //
+        const row = event.target.closest('tr'); //
+        if (!row) return; //
 
-        if (selectedPredisposizioneRow) {
-            selectedPredisposizioneRow.classList.remove('selected');
+        if (selectedPredisposizioneRow) { //
+            selectedPredisposizioneRow.classList.remove('selected'); //
         }
-        if (selectedPredisposizioneRow === row) {
-            selectedPredisposizioneRow = null;
-            tfoTableContainer.querySelector('p').textContent = "Nessun edificio predisposto selezionato.";
-            tfoTable.style.display = 'none';
-            tfoActionButtons.style.display = 'none';
-            tfoTableBody.innerHTML = '';
-            formTfoContainer.style.display = 'none';
-            tfoSectionTitle.textContent = 'Terminazioni Ottiche (TFO)';
+        if (selectedPredisposizioneRow === row) { //
+            selectedPredisposizioneRow = null; //
+            tfoTableContainer.querySelector('p').textContent = "Nessun edificio predisposto selezionato."; //
+            tfoTable.style.display = 'none'; //
+            tfoActionButtons.style.display = 'none'; //
+            tfoTableBody.innerHTML = ''; //
+            formTfoContainer.style.display = 'none'; //
+            tfoSectionTitle.textContent = 'Terminazioni Ottiche (TFO)'; //
         } else {
-            selectedPredisposizioneRow = row;
-            selectedPredisposizioneRow.classList.add('selected');
-            const predispoId = selectedPredisposizioneRow.dataset.id;
-            const predispoAddr = selectedPredisposizioneRow.dataset.indirizzo;
-            tfoSectionTitle.textContent = `Terminazioni Ottiche (TFO) per: ${predispoAddr || predispoId}`;
-            loadTfosForPredisposizione(predispoId);
-            formTfoContainer.style.display = 'none';
+            selectedPredisposizioneRow = row; //
+            selectedPredisposizioneRow.classList.add('selected'); //
+            const predispoId = selectedPredisposizioneRow.dataset.id; //
+            const predispoAddr = selectedPredisposizioneRow.dataset.indirizzo; //
+            tfoSectionTitle.textContent = `Terminazioni Ottiche (TFO) per: ${predispoAddr || predispoId}`; //
+            loadTfosForPredisposizione(predispoId); //
+            formTfoContainer.style.display = 'none'; //
         }
     });
 
     function loadTfosForPredisposizione(predispoId) {
-        tfoTableBody.innerHTML = '';
-        const tfos = tfoDataStore[predispoId] || [];
+        tfoTableBody.innerHTML = ''; //
+        const tfos = tfoDataStore[predispoId] || []; //
 
-        if (tfos.length > 0) {
-            tfos.forEach((data, index) => addTfoToTable(data, predispoId, false, index));
-            tfoTableContainer.querySelector('p').style.display = 'none';
-            tfoTable.style.display = '';
-            tfoActionButtons.style.display = '';
+        if (tfos.length > 0) { //
+            tfos.forEach((data, index) => addTfoToTable(data, predispoId, false, index)); //
+            tfoTableContainer.querySelector('p').style.display = 'none'; //
+            tfoTable.style.display = ''; //
+            tfoActionButtons.style.display = ''; //
         } else {
-            tfoTableContainer.querySelector('p').textContent = "Nessuna TFO ancora inserita per l'edificio selezionato.";
-            tfoTableContainer.querySelector('p').style.display = 'block';
-            tfoTable.style.display = 'none';
-            tfoActionButtons.style.display = 'none';
+            tfoTableContainer.querySelector('p').textContent = "Nessuna TFO ancora inserita per l'edificio selezionato."; //
+            tfoTableContainer.querySelector('p').style.display = 'block'; //
+            tfoTable.style.display = 'none'; //
+            tfoActionButtons.style.display = 'none'; //
         }
-        selectedTfoRow = null;
-        if(tfoTable.querySelector('.selected')) tfoTable.querySelector('.selected').classList.remove('selected');
+        selectedTfoRow = null; //
+        if(tfoTable.querySelector('.selected')) tfoTable.querySelector('.selected').classList.remove('selected'); //
     }
 
-    btnShowAddTfo.addEventListener('click', () => {
-        if (!selectedPredisposizioneRow) {
-            alert('Per favore, seleziona un Edificio Predisposto dalla tabella prima di aggiungere una TFO.');
-            return;
+    btnShowAddTfo.addEventListener('click', () => { //
+        if (!selectedPredisposizioneRow) { //
+            alert('Per favore, seleziona un Edificio Predisposto dalla tabella prima di aggiungere una TFO.'); //
+            return; //
         }
-        showTfoFormInternal('add');
+        showTfoFormInternal('add'); //
     });
 
-    btnModificaPredisposizione.addEventListener('click', () => {
-        if (!selectedPredisposizioneRow) {
-            alert('Per favore, seleziona un Edificio Predisposto dalla tabella da modificare.');
-            return;
+    btnModificaPredisposizione.addEventListener('click', () => { //
+        if (!selectedPredisposizioneRow) { //
+            alert('Per favore, seleziona un Edificio Predisposto dalla tabella da modificare.'); //
+            return; //
         }
-        formIndirizzo.value = selectedPredisposizioneRow.cells[1].textContent;
-        formComune.value = selectedPredisposizioneRow.cells[2].textContent;
-        formCodiceCatastale.value = selectedPredisposizioneRow.cells[3].textContent;
-        formDataPredisposizione.value = selectedPredisposizioneRow.cells[4].textContent;
-        formDbId.value = selectedPredisposizioneRow.dataset.id;
-        formLatitudine.value = selectedPredisposizioneRow.dataset.lat || '';
-        formLongitudine.value = selectedPredisposizioneRow.dataset.lon || '';
-        alert("Modulo registrazione edifici pre-compilato. Modifica i dati e salva.");
-        showSection(sectionEdifici, navEdifici);
+        formIndirizzo.value = selectedPredisposizioneRow.cells[1].textContent; //
+        formComune.value = selectedPredisposizioneRow.cells[2].textContent; //
+        formCodiceCatastale.value = selectedPredisposizioneRow.cells[3].textContent; //
+        formDataPredisposizione.value = selectedPredisposizioneRow.cells[4].textContent; //
+        formDbId.value = selectedPredisposizioneRow.dataset.id; //
+        formLatitudine.value = selectedPredisposizioneRow.dataset.lat || ''; //
+        formLongitudine.value = selectedPredisposizioneRow.dataset.lon || ''; //
+        formEdifcUso.value = ''; // O recuperare se possibile
+        alert("Modulo registrazione edifici pre-compilato. Modifica i dati e salva."); //
+        showSection(sectionEdifici, navEdifici); //
     });
 
-    btnEliminaPredisposizione.addEventListener('click', () => {
-        if (!selectedPredisposizioneRow) {
-            alert('Per favore, seleziona un Edificio Predisposto dalla tabella da eliminare.');
-            return;
+    btnEliminaPredisposizione.addEventListener('click', () => { //
+        if (!selectedPredisposizioneRow) { //
+            alert('Per favore, seleziona un Edificio Predisposto dalla tabella da eliminare.'); //
+            return; //
         }
-        if (confirm('Sei sicuro di voler eliminare questa predisposizione e tutte le TFO associate? L\'azione è irreversibile.')) {
-            const predispoIdToDelete = selectedPredisposizioneRow.dataset.id;
+        if (confirm('Sei sicuro di voler eliminare questa predisposizione e tutte le TFO associate? L\'azione è irreversibile.')) { //
+            const predispoIdToDelete = selectedPredisposizioneRow.dataset.id; //
 
-            if (tfoDataStore[predispoIdToDelete]) {
-                delete tfoDataStore[predispoIdToDelete];
-                console.log(`TFOs per l'edificio ID ${predispoIdToDelete} eliminate dallo store.`);
+            if (tfoDataStore[predispoIdToDelete]) { //
+                delete tfoDataStore[predispoIdToDelete]; //
+                console.log(`TFOs per l'edificio ID ${predispoIdToDelete} eliminate dallo store.`); //
             }
 
             // --- MODIFICATO: Chiama la funzione per aggiornare la mappa ---
-            if (typeof window.unmarkBuildingAsPredispostoOnMap === 'function') {
-                window.unmarkBuildingAsPredispostoOnMap(predispoIdToDelete);
+            if (typeof window.unmarkBuildingAsPredispostoOnMap === 'function') { //
+                window.unmarkBuildingAsPredispostoOnMap(predispoIdToDelete); //
             } else {
-                console.error("Funzione unmarkBuildingAsPredispostoOnMap non trovata.");
+                console.error("Funzione unmarkBuildingAsPredispostoOnMap non trovata."); //
             }
             // --- FINE MODIFICA ---
 
-            selectedPredisposizioneRow.remove();
-            selectedPredisposizioneRow = null;
+            selectedPredisposizioneRow.remove(); //
+            selectedPredisposizioneRow = null; //
 
-            tfoTableBody.innerHTML = '';
-            tfoTableContainer.querySelector('p').textContent = "Nessun edificio predisposto selezionato.";
-            tfoTableContainer.querySelector('p').style.display = 'block';
-            tfoTable.style.display = 'none';
-            tfoActionButtons.style.display = 'none';
-            tfoSectionTitle.textContent = 'Terminazioni Ottiche (TFO)';
+            tfoTableBody.innerHTML = ''; //
+            tfoTableContainer.querySelector('p').textContent = "Nessun edificio predisposto selezionato."; //
+            tfoTableContainer.querySelector('p').style.display = 'block'; //
+            tfoTable.style.display = 'none'; //
+            tfoActionButtons.style.display = 'none'; //
+            tfoSectionTitle.textContent = 'Terminazioni Ottiche (TFO)'; //
 
-            alert(`Predisposizione edificio ID ${predispoIdToDelete} eliminata.`);
+            alert(`Predisposizione edificio ID ${predispoIdToDelete} eliminata.`); //
         }
     });
 
     function clearTfoForm() {
-        tfoForm.reset();
-        formTfoRowIndex.value = '';
+        tfoForm.reset(); //
+        formTfoRowIndex.value = ''; //
     }
 
     function showTfoFormInternal(mode = 'add', tfoDataToEdit = null, rowIndex = null) {
-        clearTfoForm();
-        const predispoId = selectedPredisposizioneRow.dataset.id;
-        const predispoAddr = selectedPredisposizioneRow.dataset.indirizzo;
-        const predispoLat = selectedPredisposizioneRow.dataset.lat;
-        const predispoLon = selectedPredisposizioneRow.dataset.lon;
-        const predispoCatasto = selectedPredisposizioneRow.dataset.codCatastale;
+        clearTfoForm(); //
+        const predispoId = selectedPredisposizioneRow.dataset.id; //
+        const predispoAddr = selectedPredisposizioneRow.dataset.indirizzo; //
+        const predispoLat = selectedPredisposizioneRow.dataset.lat; //
+        const predispoLon = selectedPredisposizioneRow.dataset.lon; //
+        const predispoCatasto = selectedPredisposizioneRow.dataset.codCatastale; //
 
-        selectedPredisposizioneIdInput.value = predispoId;
-        formIndirizzoTfo.value = predispoAddr || '';
-        formLatitudineTfo.value = predispoLat || '';
-        formLongitudineTfo.value = predispoLon || '';
-        formCodiceCatastaleTfo.value = predispoCatasto || '';
+        selectedPredisposizioneIdInput.value = predispoId; //
+        formIndirizzoTfo.value = predispoAddr || ''; //
+        formLatitudineTfo.value = predispoLat || ''; //
+        formLongitudineTfo.value = predispoLon || ''; //
+        formCodiceCatastaleTfo.value = predispoCatasto || ''; //
 
-        if (mode === 'edit' && tfoDataToEdit) {
-            formDataPredisposizioneTfo.value = tfoDataToEdit.dataPredTFO;
-            formScalaTfo.value = tfoDataToEdit.scala;
-            formPianoTfo.value = tfoDataToEdit.piano;
-            formInternoTfo.value = tfoDataToEdit.interno;
-            formIdOperatoreTfo.value = tfoDataToEdit.operatore;
-            formCodiceTfo.value = tfoDataToEdit.codiceTfo;
-            formCodiceRoeTfo.value = tfoDataToEdit.codiceRoe;
-            formTfoRowIndex.value = rowIndex;
+        if (mode === 'edit' && tfoDataToEdit) { //
+            formDataPredisposizioneTfo.value = tfoDataToEdit.dataPredTFO; //
+            formScalaTfo.value = tfoDataToEdit.scala; //
+            formPianoTfo.value = tfoDataToEdit.piano; //
+            formInternoTfo.value = tfoDataToEdit.interno; //
+            formIdOperatoreTfo.value = tfoDataToEdit.operatore; //
+            formCodiceTfo.value = tfoDataToEdit.codiceTfo; //
+            formCodiceRoeTfo.value = tfoDataToEdit.codiceRoe; //
+            formTfoRowIndex.value = rowIndex; //
         }
-        formTfoContainer.style.display = 'block';
+        formTfoContainer.style.display = 'block'; //
     }
 
-    btnAnnullaTfo.addEventListener('click', () => {
-        formTfoContainer.style.display = 'none';
-        clearTfoForm();
+    btnAnnullaTfo.addEventListener('click', () => { //
+        formTfoContainer.style.display = 'none'; //
+        clearTfoForm(); //
     });
 
-    btnSalvaTfo.addEventListener('click', () => {
-        const currentPredispoId = selectedPredisposizioneIdInput.value;
-        if (!currentPredispoId) {
-            alert("Errore: ID edificio predisposto non trovato.");
-            return;
+    btnSalvaTfo.addEventListener('click', () => { //
+        const currentPredispoId = selectedPredisposizioneIdInput.value; //
+        if (!currentPredispoId) { //
+            alert("Errore: ID edificio predisposto non trovato."); //
+            return; //
         }
 
         const tfoData = {
-            dataPredTFO: formDataPredisposizioneTfo.value,
-            scala: formScalaTfo.value,
-            piano: formPianoTfo.value,
-            interno: formInternoTfo.value,
-            operatore: formIdOperatoreTfo.value,
-            codiceTfo: formCodiceTfo.value,
-            codiceRoe: formCodiceRoeTfo.value,
+            dataPredTFO: formDataPredisposizioneTfo.value, //
+            scala: formScalaTfo.value, //
+            piano: formPianoTfo.value, //
+            interno: formInternoTfo.value, //
+            operatore: formIdOperatoreTfo.value, //
+            codiceTfo: formCodiceTfo.value, //
+            codiceRoe: formCodiceRoeTfo.value, //
         };
 
-        if (!tfoData.dataPredTFO || !tfoData.codiceTfo) {
-            alert("Per favore, compila almeno Data Predisposizione TFO e Codice TFO.");
-            return;
+        if (!tfoData.dataPredTFO || !tfoData.codiceTfo) { //
+            alert("Per favore, compila almeno Data Predisposizione TFO e Codice TFO."); //
+            return; //
         }
 
-        const rowIndexToEdit = formTfoRowIndex.value;
+        const rowIndexToEdit = formTfoRowIndex.value; //
 
-        if (rowIndexToEdit !== '') {
-            const tfoIndex = parseInt(rowIndexToEdit);
-            tfoDataStore[currentPredispoId][tfoIndex] = tfoData;
-            const row = tfoTableBody.rows[tfoIndex];
-            row.cells[0].textContent = tfoData.scala;
-            row.cells[1].textContent = tfoData.piano;
-            row.cells[2].textContent = tfoData.interno;
-            row.cells[3].textContent = tfoData.dataPredTFO;
-            row.cells[4].textContent = tfoData.operatore;
-            row.cells[5].textContent = tfoData.codiceTfo;
-            row.cells[6].textContent = tfoData.codiceRoe;
-            row.classList.remove('selected');
-            selectedTfoRow = null;
+        if (rowIndexToEdit !== '') { //
+            const tfoIndex = parseInt(rowIndexToEdit); //
+            tfoDataStore[currentPredispoId][tfoIndex] = tfoData; //
+            const row = tfoTableBody.rows[tfoIndex]; //
+            row.cells[0].textContent = tfoData.scala; //
+            row.cells[1].textContent = tfoData.piano; //
+            row.cells[2].textContent = tfoData.interno; //
+            row.cells[3].textContent = tfoData.dataPredTFO; //
+            row.cells[4].textContent = tfoData.operatore; //
+            row.cells[5].textContent = tfoData.codiceTfo; //
+            row.cells[6].textContent = tfoData.codiceRoe; //
+            row.classList.remove('selected'); //
+            selectedTfoRow = null; //
         } else {
-            const newIndex = tfoDataStore[currentPredispoId].length;
-            addTfoToTable(tfoData, currentPredispoId, true, newIndex);
+            const newIndex = tfoDataStore[currentPredispoId].length; //
+            addTfoToTable(tfoData, currentPredispoId, true, newIndex); //
         }
 
-        formTfoContainer.style.display = 'none';
-        clearTfoForm();
-        loadTfosForPredisposizione(currentPredispoId);
-        alert('TFO salvata!');
+        formTfoContainer.style.display = 'none'; //
+        clearTfoForm(); //
+        loadTfosForPredisposizione(currentPredispoId); //
+        alert('TFO salvata!'); //
     });
 
     function addTfoToTable(data, predispoId, saveToStore = true, index) {
-        if (saveToStore) {
-            if (!tfoDataStore[predispoId]) {
-                tfoDataStore[predispoId] = [];
+        if (saveToStore) { //
+            if (!tfoDataStore[predispoId]) { //
+                tfoDataStore[predispoId] = []; //
             }
-            if (index === tfoDataStore[predispoId].length) {
-                tfoDataStore[predispoId].push(data);
+            if (index === tfoDataStore[predispoId].length) { //
+                tfoDataStore[predispoId].push(data); //
             }
         }
 
-        const newRow = tfoTableBody.insertRow();
-        newRow.dataset.index = index;
+        const newRow = tfoTableBody.insertRow(); //
+        newRow.dataset.index = index; //
         newRow.innerHTML = `
             <td>${data.scala}</td>
             <td>${data.piano}</td>
@@ -378,71 +401,71 @@ document.addEventListener('DOMContentLoaded', function() {
             <td>${data.operatore}</td>
             <td>${data.codiceTfo}</td>
             <td>${data.codiceRoe}</td>
-        `;
-        tfoTableContainer.querySelector('p').style.display = 'none';
-        tfoTable.style.display = '';
-        tfoActionButtons.style.display = '';
+        `; //
+        tfoTableContainer.querySelector('p').style.display = 'none'; //
+        tfoTable.style.display = ''; //
+        tfoActionButtons.style.display = ''; //
     }
 
-    tfoTableBody.addEventListener('click', (event) => {
-        const row = event.target.closest('tr');
-        if (!row) return;
+    tfoTableBody.addEventListener('click', (event) => { //
+        const row = event.target.closest('tr'); //
+        if (!row) return; //
 
-        if (selectedTfoRow) {
-            selectedTfoRow.classList.remove('selected');
+        if (selectedTfoRow) { //
+            selectedTfoRow.classList.remove('selected'); //
         }
-        if (selectedTfoRow === row) {
-            selectedTfoRow = null;
+        if (selectedTfoRow === row) { //
+            selectedTfoRow = null; //
         } else {
-            selectedTfoRow = row;
-            selectedTfoRow.classList.add('selected');
+            selectedTfoRow = row; //
+            selectedTfoRow.classList.add('selected'); //
         }
     });
 
-    btnModificaTfo.addEventListener('click', () => {
-        if (!selectedTfoRow) {
-            alert('Seleziona una riga TFO da modificare.');
-            return;
+    btnModificaTfo.addEventListener('click', () => { //
+        if (!selectedTfoRow) { //
+            alert('Seleziona una riga TFO da modificare.'); //
+            return; //
         }
-        if (!selectedPredisposizioneRow) {
-            alert('Nessun edificio predisposto selezionato.');
-            return;
+        if (!selectedPredisposizioneRow) { //
+            alert('Nessun edificio predisposto selezionato.'); //
+            return; //
         }
-        const currentPredispoId = selectedPredisposizioneRow.dataset.id;
-        const tfoIndex = parseInt(selectedTfoRow.dataset.index);
+        const currentPredispoId = selectedPredisposizioneRow.dataset.id; //
+        const tfoIndex = parseInt(selectedTfoRow.dataset.index); //
 
-        if (isNaN(tfoIndex) || !tfoDataStore[currentPredispoId] || tfoIndex >= tfoDataStore[currentPredispoId].length) {
-            console.error("Indice TFO non valido o dato non trovato:", tfoIndex, currentPredispoId);
-            alert("Errore nel recupero dei dati TFO. Riprova.");
-            return;
+        if (isNaN(tfoIndex) || !tfoDataStore[currentPredispoId] || tfoIndex >= tfoDataStore[currentPredispoId].length) { //
+            console.error("Indice TFO non valido o dato non trovato:", tfoIndex, currentPredispoId); //
+            alert("Errore nel recupero dei dati TFO. Riprova."); //
+            return; //
         }
 
-        const tfoDataToEdit = tfoDataStore[currentPredispoId][tfoIndex];
-        showTfoFormInternal('edit', tfoDataToEdit, tfoIndex);
+        const tfoDataToEdit = tfoDataStore[currentPredispoId][tfoIndex]; //
+        showTfoFormInternal('edit', tfoDataToEdit, tfoIndex); //
     });
 
-    btnEliminaTfo.addEventListener('click', () => {
-        if (!selectedTfoRow) {
-            alert('Seleziona una riga TFO da eliminare.');
-            return;
+    btnEliminaTfo.addEventListener('click', () => { //
+        if (!selectedTfoRow) { //
+            alert('Seleziona una riga TFO da eliminare.'); //
+            return; //
         }
-        if (!selectedPredisposizioneRow) {
-            alert('Nessun edificio predisposto selezionato.');
-            return;
+        if (!selectedPredisposizioneRow) { //
+            alert('Nessun edificio predisposto selezionato.'); //
+            return; //
         }
 
-        if (confirm('Sei sicuro di voler eliminare questa TFO?')) {
-            const currentPredispoId = selectedPredisposizioneRow.dataset.id;
-            const tfoIndex = parseInt(selectedTfoRow.dataset.index);
+        if (confirm('Sei sicuro di voler eliminare questa TFO?')) { //
+            const currentPredispoId = selectedPredisposizioneRow.dataset.id; //
+            const tfoIndex = parseInt(selectedTfoRow.dataset.index); //
 
-            if (isNaN(tfoIndex) || !tfoDataStore[currentPredispoId] || tfoIndex >= tfoDataStore[currentPredispoId].length) {
-                 console.error("Indice TFO non valido per eliminazione:", tfoIndex, currentPredispoId);
-                 alert("Errore nell'eliminazione della TFO. Riprova.");
-                 return;
+            if (isNaN(tfoIndex) || !tfoDataStore[currentPredispoId] || tfoIndex >= tfoDataStore[currentPredispoId].length) { //
+                 console.error("Indice TFO non valido per eliminazione:", tfoIndex, currentPredispoId); //
+                 alert("Errore nell'eliminazione della TFO. Riprova."); //
+                 return; //
             }
 
-            tfoDataStore[currentPredispoId].splice(tfoIndex, 1);
-            loadTfosForPredisposizione(currentPredispoId);
+            tfoDataStore[currentPredispoId].splice(tfoIndex, 1); //
+            loadTfosForPredisposizione(currentPredispoId); //
         }
     });
 });
