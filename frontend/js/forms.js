@@ -168,6 +168,43 @@ document.addEventListener('DOMContentLoaded', function() {
         xhr.send(JSON.stringify(data));
     }
 
+    // --- Funzione per caricare la lista degli edifici predisposti dal backend ---
+    function caricaEdificiPredisposti() {
+        predisposizioniTableBody.innerHTML = '';
+        fetch(API_BASE_URL + '/edifici_predisposti')
+            .then(response => response.json())
+            .then(data => {
+                if (Array.isArray(data)) {
+                    data.forEach(edificio => {
+                        const newRow = predisposizioniTableBody.insertRow();
+                        newRow.dataset.id = edificio.id_abitazione;
+                        newRow.innerHTML = `
+                            <td>${edificio.id_abitazione}</td>
+                            <td>${edificio.indirizzo || ''}</td>
+                            <td>${edificio.comune || ''}</td>
+                            <td>${edificio.codice_catastale || ''}</td>
+                            <td>${edificio.data_predisposizione || ''}</td>
+                        `;
+                    });
+                }
+            })
+            .catch(err => {
+                console.error('Errore nel caricamento degli edifici predisposti:', err);
+            });
+    }
+
+    // Carica la lista all'avvio e quando si passa alla sezione TFO
+    navTfo.addEventListener('click', (e) => {
+        e.preventDefault();
+        showSection(sectionTfo, navTfo);
+        caricaEdificiPredisposti();
+    });
+
+    // Carica la lista anche all'avvio se la sezione TFO è visibile
+    if (sectionTfo.style.display !== 'none') {
+        caricaEdificiPredisposti();
+    }
+
     // --- Logica Sezione Lista Edifici ---
     if (btnSalvaPredisposizione && buildingForm) {
         btnSalvaPredisposizione.addEventListener('click', function(event) {

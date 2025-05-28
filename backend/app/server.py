@@ -645,3 +645,36 @@ def inserisci_predisposizione_dati(verifica: VerificaEdificioCompleta):
     finally:
         if 'cursor' in locals(): cursor.close()
         if 'conn' in locals(): conn.close()
+
+@app.get("/edifici_predisposti")
+def get_edifici_predisposti():
+    """
+    Restituisce la lista degli edifici predisposti alla fibra dalla tabella verifiche_edifici.
+    """
+    import psycopg2
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id_abitazione, indirizzo, comune, codice_catastale, data_predisposizione
+            FROM verifiche_edifici
+            WHERE predisposto_fibra = true
+            ORDER BY data_predisposizione DESC
+        """)
+        rows = cursor.fetchall()
+        result = [
+            {
+                "id_abitazione": row[0],
+                "indirizzo": row[1],
+                "comune": row[2],
+                "codice_catastale": row[3],
+                "data_predisposizione": row[4]
+            }
+            for row in rows
+        ]
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore durante il recupero degli edifici predisposti: {str(e)}")
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
