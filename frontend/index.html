@@ -212,11 +212,10 @@
             <div class="form-section">
                 <h3 id="tfoSectionTitle">Terminazioni Ottiche (TFO)</h3>
                  <div id="formTfoContainer" class="form-section">
-                    <!-- <h4 id="formTfoTitle">Aggiungi Nuova TFO</h4> -->
                     <form id="tfoForm">
                         <input type="hidden" id="formTfoRowIndex"> <input type="hidden" id="selectedPredisposizioneId">
                         <br><br>
-                        <div class="form-group"> 
+                        <div class="form-group">
                           <label class="active" for="formIndirizzoTfo">Nome Edificio / Indirizzo</label>
                           <input type="text" class="form-control" id="formIndirizzoTfo" readonly>
                         </div>
@@ -301,6 +300,47 @@
         </footer>
 
 </div>
+
+<div class="modal fade" tabindex="-1" role="dialog" id="genericModal">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="genericModalTitle">Titolo</h5>
+        <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Chiudi finestra modale">
+          <svg class="icon"><use href="https://italia.github.io/bootstrap-italia/dist/svg/sprites.svg#it-close"></use></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="genericModalBody">Contenuto del messaggio.</p>
+      </div>
+      <div class="modal-footer">
+         <button class="btn btn-primary" type="button" data-bs-dismiss="modal">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" tabindex="-1" role="dialog" id="confirmModal">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmModalTitle">Conferma</h5>
+         <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Chiudi finestra modale">
+           <svg class="icon"><use href="https://italia.github.io/bootstrap-italia/dist/svg/sprites.svg#it-close"></use></svg>
+         </button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmModalBody">Sei sicuro?</p>
+      </div>
+      <div class="modal-footer">
+        <button id="confirmModalCancelBtn" class="btn btn-secondary" type="button" data-bs-dismiss="modal">Annulla</button>
+        <button id="confirmModalConfirmBtn" class="btn btn-primary" type="button">Conferma</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
         crossorigin=""></script>
