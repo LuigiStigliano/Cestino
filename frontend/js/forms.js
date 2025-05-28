@@ -62,6 +62,11 @@ document.addEventListener('DOMContentLoaded', function() {
     let confirmModal = confirmModalElement ? new bootstrap.Modal(confirmModalElement) : null;
     let confirmModalConfirmBtn = document.getElementById('confirmModalConfirmBtn');
 
+    // --- NUOVO: Nascondi i pulsanti TFO all'avvio ---
+    btnShowAddTfo.style.display = 'none';
+    btnModificaPredisposizione.style.display = 'none';
+    btnEliminaPredisposizione.style.display = 'none';
+
     // --- Funzioni Modal ---
     function showModal(title, message, type = 'info') {
         if (!genericModal) {
@@ -103,6 +108,14 @@ document.addEventListener('DOMContentLoaded', function() {
         confirmModal.show();
     }
 
+    // --- NUOVO: Funzione per aggiornare la visibilità dei 3 pulsanti TFO ---
+    function updateTfoButtonsVisibility() {
+        const hasRows = predisposizioniTableBody.rows.length > 0;
+        btnShowAddTfo.style.display = hasRows ? '' : 'none';
+        btnModificaPredisposizione.style.display = hasRows ? '' : 'none';
+        btnEliminaPredisposizione.style.display = hasRows ? '' : 'none';
+    }
+
 
     // --- Inizializzazione Mappa ---
     if (typeof initMap === 'function') {
@@ -111,6 +124,9 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error("La funzione initMap() non è stata trovata.");
     }
     console.log("Applicazione Frontend Inizializzata.");
+
+    // --- NUOVO: Chiama la funzione per impostare lo stato iniziale dei pulsanti ---
+    updateTfoButtonsVisibility();
 
     // --- Logica Navigazione Sezioni ---
     function showSection(sectionToShow, navLinkToActivate) {
@@ -221,6 +237,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 showModal('Successo', `Edificio ID: ${predisposizioneData.id} registrato come predisposto e aggiunto alla tabella.`, 'success');
             }
 
+            // --- NUOVO: Aggiorna la visibilità dei pulsanti ---
+            updateTfoButtonsVisibility();
+
             buildingForm.reset();
             formDbId.value = '';
             formObjectId.value = '';
@@ -327,6 +346,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 selectedPredisposizioneRow.remove();
                 selectedPredisposizioneRow = null;
+
+                // --- NUOVO: Aggiorna la visibilità dei pulsanti ---
+                updateTfoButtonsVisibility();
 
                 tfoTableBody.innerHTML = '';
                 tfoTableContainer.querySelector('p').textContent = "Nessun edificio predisposto selezionato.";
