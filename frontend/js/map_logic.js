@@ -137,6 +137,17 @@ function loadBuildingsDataByBounds() {
             geoJsonLayer = null;
             centroidLayer = null;
 
+            // Popola predispostoIds in base al campo predisposto_fibra
+            predispostoIds = new Set();
+            if (data.features) {
+                data.features.forEach(feature => {
+                    if (feature.properties && feature.properties.predisposto_fibra) {
+                        const buildingId = feature.properties.id || feature.properties.objectid;
+                        if (buildingId) predispostoIds.add(String(buildingId));
+                    }
+                });
+            }
+
             const featureCount = data.features ? data.features.length : 0;
             if (loadingIndicator) {
                 loadingIndicator.innerHTML = `Caricati ${featureCount} elementi`;

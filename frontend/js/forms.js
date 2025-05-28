@@ -62,11 +62,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let confirmModal = confirmModalElement ? new bootstrap.Modal(confirmModalElement) : null;
     let confirmModalConfirmBtn = document.getElementById('confirmModalConfirmBtn');
 
-    // --- NUOVO: Nascondi i pulsanti TFO all'avvio ---
-    btnShowAddTfo.style.display = 'none';
-    btnModificaPredisposizione.style.display = 'none';
-    btnEliminaPredisposizione.style.display = 'none';
-
     // --- Funzioni Modal ---
     function showModal(title, message, type = 'info') {
         if (!genericModal) {
@@ -108,14 +103,6 @@ document.addEventListener('DOMContentLoaded', function() {
         confirmModal.show();
     }
 
-    // --- NUOVO: Funzione per aggiornare la visibilità dei 3 pulsanti TFO ---
-    function updateTfoButtonsVisibility() {
-        const hasRows = predisposizioniTableBody.rows.length > 0;
-        btnShowAddTfo.style.display = hasRows ? '' : 'none';
-        btnModificaPredisposizione.style.display = hasRows ? '' : 'none';
-        btnEliminaPredisposizione.style.display = hasRows ? '' : 'none';
-    }
-
 
     // --- Inizializzazione Mappa ---
     if (typeof initMap === 'function') {
@@ -124,9 +111,6 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error("La funzione initMap() non è stata trovata.");
     }
     console.log("Applicazione Frontend Inizializzata.");
-
-    // --- NUOVO: Chiama la funzione per impostare lo stato iniziale dei pulsanti ---
-    updateTfoButtonsVisibility();
 
     // --- Logica Navigazione Sezioni ---
     function showSection(sectionToShow, navLinkToActivate) {
@@ -156,6 +140,34 @@ document.addEventListener('DOMContentLoaded', function() {
 
     showSection(sectionEdifici, navEdifici);
 
+    // --- Configurazione API URL ---
+    const API_BASE_URL = 'http://127.0.0.1:8000'; // URL esplicito del backend
+
+    // --- Funzione per chiamate API con XMLHttpRequest ---
+    function sendXhrRequest(method, endpoint, data, successCallback, errorCallback) {
+        const xhr = new XMLHttpRequest();
+        xhr.open(method, API_BASE_URL + endpoint, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        successCallback(response);
+                    } catch (e) {
+                        errorCallback('Errore nel parsing della risposta: ' + e.message);
+                    }
+                } else {
+                    errorCallback('Errore nella richiesta: ' + xhr.status + ' ' + xhr.statusText);
+                }
+            }
+        };
+        xhr.onerror = function() {
+            errorCallback('Errore di rete nella richiesta');
+        };
+        xhr.send(JSON.stringify(data));
+    }
+
     // --- Logica Sezione Lista Edifici ---
     if (btnSalvaPredisposizione && buildingForm) {
         btnSalvaPredisposizione.addEventListener('click', function(event) {
@@ -168,6 +180,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const codCatastale = formCodiceCatastale.value;
             const lat = formLatitudine.value;
             const lon = formLongitudine.value;
+            const usoEdificio = formEdifcUso.value;
+            const codiceBelfiore = (typeof formCodiceBelfiore !== 'undefined' && formCodiceBelfiore) ? formCodiceBelfiore.value : '';
 
             if (!dbId && !objectId) {
                 showModal('Attenzione', 'Per favore, seleziona un edificio dalla mappa prima di salvare la predisposizione.', 'warning');
@@ -195,50 +209,101 @@ document.addEventListener('DOMContentLoaded', function() {
                 lat: lat,
                 lon: lon,
                 comune: comune,
+                codiceBelfiore: codiceBelfiore,
                 codCatastale: codCatastale,
                 dataPred: dataPred,
+                usoEdificio: usoEdificio
             };
 
-            if (existingRow) {
-                existingRow.dataset.indirizzo = predisposizioneData.indirizzo;
-                existingRow.dataset.lat = predisposizioneData.lat;
-                existingRow.dataset.lon = predisposizioneData.lon;
-                existingRow.dataset.codCatastale = predisposizioneData.codCatastale;
-                existingRow.cells[1].textContent = predisposizioneData.indirizzo;
-                existingRow.cells[2].textContent = predisposizioneData.comune;
-                existingRow.cells[3].textContent = predisposizioneData.codCatastale;
-                existingRow.cells[4].textContent = predisposizioneData.dataPred;
-                showModal('Successo', `Predisposizione edificio ID: ${predisposizioneData.id} modificata con successo.`, 'success');
-            } else {
-                const newRow = predisposizioniTableBody.insertRow();
-                newRow.dataset.id = predisposizioneData.id;
-                newRow.dataset.indirizzo = predisposizioneData.indirizzo;
-                newRow.dataset.lat = predisposizioneData.lat;
-                newRow.dataset.lon = predisposizioneData.lon;
-                newRow.dataset.codCatastale = predisposizioneData.codCatastale;
-                newRow.innerHTML = `
-                    <td>${predisposizioneData.id}</td>
-                    <td>${predisposizioneData.indirizzo}</td>
-                    <td>${predisposizioneData.comune}</td>
-                    <td>${predisposizioneData.codCatastale}</td>
-                    <td>${predisposizioneData.dataPred}</td>
-                `;
+            // Chiamata all'endpoint per aggiornare predisposto_fibra e salvare tutti i dati
+            sendXhrRequest(
+                'POST',
+                '/predisposizione_fibra',
+                {
+                    id: parseInt(uniqueId),
+                    indirizzo: indirizzo,
+                    lat: lat ? parseFloat(lat) : null,
+                    lon: lon ? parseFloat(lon) : null,
+                    uso_edificio: usoEdificio || null,
+                    comune: comune,
+                    codice_belfiore: codiceBelfiore || null,
+                    codice_catastale: codCatastale || null,
+                    data_predisposizione: dataPred
+                },
+                function(data) {
+                    // Aggiorna UI dopo il successo della chiamata API
+                    if (existingRow) {
+                        existingRow.dataset.indirizzo = predisposizioneData.indirizzo;
+                        existingRow.dataset.lat = predisposizioneData.lat;
+                        existingRow.dataset.lon = predisposizioneData.lon;
+                        existingRow.dataset.codCatastale = predisposizioneData.codCatastale;
+                        existingRow.cells[1].textContent = predisposizioneData.indirizzo;
+                        existingRow.cells[2].textContent = predisposizioneData.comune;
+                        existingRow.cells[3].textContent = predisposizioneData.codCatastale;
+                        existingRow.cells[4].textContent = predisposizioneData.dataPred;
+                        showModal('Successo', `Predisposizione edificio ID: ${predisposizioneData.id} modificata con successo.`, 'success');
+                    } else {
+                        const newRow = predisposizioniTableBody.insertRow();
+                        newRow.dataset.id = predisposizioneData.id;
+                        newRow.dataset.indirizzo = predisposizioneData.indirizzo;
+                        newRow.dataset.lat = predisposizioneData.lat;
+                        newRow.dataset.lon = predisposizioneData.lon;
+                        newRow.dataset.codCatastale = predisposizioneData.codCatastale;
+                        newRow.innerHTML = `
+                            <td>${predisposizioneData.id}</td>
+                            <td>${predisposizioneData.indirizzo}</td>
+                            <td>${predisposizioneData.comune}</td>
+                            <td>${predisposizioneData.codCatastale}</td>
+                            <td>${predisposizioneData.dataPred}</td>
+                        `;
 
-                if (!tfoDataStore[predisposizioneData.id]) {
-                    tfoDataStore[predisposizioneData.id] = [];
+                        if (!tfoDataStore[predisposizioneData.id]) {
+                            tfoDataStore[predisposizioneData.id] = [];
+                        }
+
+                        if (typeof window.markBuildingAsPredispostoOnMap === 'function') {
+                            window.markBuildingAsPredispostoOnMap(predisposizioneData.id);
+                        } else {
+                            console.error("Funzione markBuildingAsPredispostoOnMap non trovata.");
+                        }
+
+                        showModal('Successo', `Edificio ID: ${predisposizioneData.id} registrato come predisposto e aggiunto alla tabella.`, 'success');
+                    }
+
+                    // Chiamata all'endpoint per inserire o aggiornare i dati nella tabella verifiche_edifici
+                    sendXhrRequest(
+                        'PUT',
+                        '/inserisci_predisposizione_dati',
+                        {
+                            id_abitazione: parseInt(uniqueId),
+                            indirizzo: indirizzo,
+                            lat: lat ? parseFloat(lat) : null,
+                            lon: lon ? parseFloat(lon) : null,
+                            uso_edificio: usoEdificio || null,
+                            comune: comune,
+                            codice_belfiore: codiceBelfiore || null,
+                            codice_catastale: codCatastale || null,
+                            data_predisposizione: dataPred,
+                            scala: null,
+                            piano: null,
+                            interno: null,
+                            id_operatore: null,
+                            id_tfo: null,
+                            id_roe: null
+                        },
+                        function(data) {
+                            // Success, do nothing
+                        },
+                        function(error) {
+                            console.error('Errore durante l\'inserimento dei dati:', error);
+                        }
+                    );
+                },
+                function(error) {
+                    console.error('Errore durante il salvataggio:', error);
+                    showModal('Errore', `Errore durante il salvataggio: ${error}`, 'error');
                 }
-
-                if (typeof window.markBuildingAsPredispostoOnMap === 'function') {
-                    window.markBuildingAsPredispostoOnMap(predisposizioneData.id);
-                } else {
-                    console.error("Funzione markBuildingAsPredispostoOnMap non trovata.");
-                }
-
-                showModal('Successo', `Edificio ID: ${predisposizioneData.id} registrato come predisposto e aggiunto alla tabella.`, 'success');
-            }
-
-            // --- NUOVO: Aggiorna la visibilità dei pulsanti ---
-            updateTfoButtonsVisibility();
+            );
 
             buildingForm.reset();
             formDbId.value = '';
@@ -246,7 +311,6 @@ document.addEventListener('DOMContentLoaded', function() {
             formLatitudine.value = '';
             formLongitudine.value = '';
             formEdifcUso.value = '';
-
         });
     }
 
@@ -346,9 +410,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 selectedPredisposizioneRow.remove();
                 selectedPredisposizioneRow = null;
-
-                // --- NUOVO: Aggiorna la visibilità dei pulsanti ---
-                updateTfoButtonsVisibility();
 
                 tfoTableBody.innerHTML = '';
                 tfoTableContainer.querySelector('p').textContent = "Nessun edificio predisposto selezionato.";
