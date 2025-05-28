@@ -532,7 +532,6 @@ class VerificaEdificioCompleta(BaseModel):
     lon: Optional[float]
     uso_edificio: Optional[str]
     comune: str
-    codice_belfiore: Optional[str]
     codice_catastale: Optional[str]
     data_predisposizione: str
     scala: Optional[str]
@@ -562,7 +561,7 @@ def inserisci_predisposizione_dati(verifica: VerificaEdificioCompleta):
         if record_esistente:
             # Recupera i dati esistenti prima di aggiornare
             cursor.execute("""
-                SELECT indirizzo, lat, lon, uso_edificio, comune, codice_belfiore, codice_catastale, data_predisposizione
+                SELECT indirizzo, lat, lon, uso_edificio, comune, codice_catastale, data_predisposizione
                 FROM verifiche_edifici
                 WHERE id_abitazione = %s
             """, (verifica.id_abitazione,))
@@ -576,7 +575,6 @@ def inserisci_predisposizione_dati(verifica: VerificaEdificioCompleta):
                     lon = COALESCE(%s, lon),
                     uso_edificio = COALESCE(%s, uso_edificio),
                     comune = COALESCE(%s, comune),
-                    codice_belfiore = COALESCE(%s, codice_belfiore),
                     codice_catastale = COALESCE(%s, codice_catastale),
                     data_predisposizione = COALESCE(%s, data_predisposizione),
                     scala = %s,
@@ -592,7 +590,6 @@ def inserisci_predisposizione_dati(verifica: VerificaEdificioCompleta):
                 verifica.lon,
                 verifica.uso_edificio,
                 verifica.comune if verifica.comune else dati_esistenti[4],
-                verifica.codice_belfiore,
                 verifica.codice_catastale,
                 verifica.data_predisposizione if verifica.data_predisposizione else None,
                 verifica.scala,
@@ -609,7 +606,7 @@ def inserisci_predisposizione_dati(verifica: VerificaEdificioCompleta):
             cursor.execute("""
                 INSERT INTO verifiche_edifici (
                     id_abitazione, predisposto_fibra, indirizzo, lat, lon, 
-                    uso_edificio, comune, codice_belfiore, codice_catastale, 
+                    uso_edificio, comune, codice_catastale, 
                     data_predisposizione, scala, piano, interno, 
                     id_operatore, id_tfo, id_roe
                 ) VALUES (
@@ -622,7 +619,6 @@ def inserisci_predisposizione_dati(verifica: VerificaEdificioCompleta):
                 verifica.lon,
                 verifica.uso_edificio,
                 verifica.comune,
-                verifica.codice_belfiore,
                 verifica.codice_catastale,
                 verifica.data_predisposizione,
                 verifica.scala,

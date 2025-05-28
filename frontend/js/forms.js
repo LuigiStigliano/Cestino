@@ -169,20 +169,16 @@ document.addEventListener('DOMContentLoaded', function() {
         xhr.setRequestHeader('Content-Type', 'application/json');
         xhr.onreadystatechange = function() {
             if (xhr.readyState === 4) {
+                let responseData = xhr.responseText;
+                try {
+                    responseData = JSON.parse(xhr.responseText);
+                } catch (e) {
+                    // Se non è JSON, lascia la stringa
+                }
                 if (xhr.status >= 200 && xhr.status < 300) {
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        successCallback(response);
-                    } catch (e) {
-                        errorCallback('Errore nel parsing della risposta: ' + e.message);
-                    }
+                    successCallback(responseData);
                 } else {
-                    let errorMsg = 'Errore nella richiesta: ' + xhr.status + ' ' + xhr.statusText;
-                    try {
-                         const errorResponse = JSON.parse(xhr.responseText);
-                         errorMsg += ' - ' + (errorResponse.detail || '');
-                    } catch(e) { /* ignore parsing error */ }
-                    errorCallback(errorMsg);
+                    errorCallback(responseData);
                 }
             }
         };
@@ -500,7 +496,6 @@ document.addEventListener('DOMContentLoaded', function() {
             lon: formLongitudineTfo.value ? parseFloat(formLongitudineTfo.value) : null,
             uso_edificio: null, // O recuperarlo se necessario
             comune: document.getElementById('formComune').value, // Recupera il comune dalla sezione edifici (potrebbe essere vuoto)
-            codice_belfiore: document.getElementById('formCodiceBelfiore') ? document.getElementById('formCodiceBelfiore').value : null,
             codice_catastale: formCodiceCatastaleTfo.value,
             data_predisposizione: tfoData.dataPredTFO, // Usa la data TFO qui
             scala: tfoData.scala || null,
@@ -552,10 +547,7 @@ document.addEventListener('DOMContentLoaded', function() {
                  tfoDataStore[predispoId].push(data); // Aggiunta
             }
         }
-
-        // Ricarica la tabella invece di aggiungere solo una riga,
-        // per semplicità e coerenza, specialmente dopo le modifiche.
-        loadTfosForPredisposizione(predispoId);
+        // Rimuovo la chiamata ricorsiva a loadTfosForPredisposizione per evitare loop infinito
     }
 
     tfoTableBody.addEventListener('click', (event) => {
