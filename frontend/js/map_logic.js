@@ -137,6 +137,18 @@ function loadBuildingsDataByBounds() {
             geoJsonLayer = null;
             centroidLayer = null;
 
+            // *** AGGIUNTO: Popola predispostoIds in base al campo predisposto_fibra ***
+            predispostoIds = new Set();
+            if (data.features) {
+                data.features.forEach(feature => {
+                    if (feature.properties && feature.properties.predisposto_fibra) {
+                        const buildingId = feature.properties.id || feature.properties.objectid;
+                        if (buildingId) predispostoIds.add(String(buildingId));
+                    }
+                });
+            }
+            // *** FINE AGGIUNTA ***
+
             const featureCount = data.features ? data.features.length : 0;
             if (loadingIndicator) {
                 loadingIndicator.innerHTML = `Caricati ${featureCount} elementi`;
@@ -162,11 +174,12 @@ function loadBuildingsDataByBounds() {
             }, {
                 style: function(feature) {
                     const buildingId = feature.properties.id || feature.properties.objectid;
+                    // *** MODIFICATO: Usa 'predispostoIds' popolato dinamicamente ***
                     const isPredisposto = predispostoIds.has(String(buildingId));
 
                     if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
                         return {
-                            color: isPredisposto ? 'yellow' : 'red',
+                            color: isPredisposto ? 'yellow' : 'red', // Giallo se predisposto, altrimenti rosso
                             weight: 1,
                             fillOpacity: 0.3,
                             smoothFactor: 0
@@ -205,6 +218,7 @@ function loadBuildingsDataByBounds() {
                         const formDbId = document.getElementById('formDbId');
                         const formObjectId = document.getElementById('formObjectId');
                         const formEdifcUso = document.getElementById('formEdifcUso');
+                        const formCodiceBelfiore = document.getElementById('formCodiceBelfiore'); // Aggiunto per completezza
 
                         if (formIndirizzo) formIndirizzo.value = props.edifc_nome || props.id || '';
                         if (formObjectId) formObjectId.value = props.objectid || '';
@@ -212,6 +226,7 @@ function loadBuildingsDataByBounds() {
                         if (formEdifcUso) formEdifcUso.value = props.edifc_uso || '';
                         if (formLat) formLat.value = latlng.lat.toFixed(8);
                         if (formLon) formLon.value = latlng.lng.toFixed(8);
+                        // Potresti voler popolare anche Comune e Codice Belfiore se disponibili nelle props
 
                         if (props.centroid && formLat && formLon) {
                             const centroidCoords = props.centroid.coordinates;
@@ -298,5 +313,3 @@ function unmarkBuildingAsPredispostoOnMap(buildingId) {
     }
 }
 window.unmarkBuildingAsPredispostoOnMap = unmarkBuildingAsPredispostoOnMap;
-
-// initMap() sarà chiamata da index.html o da forms.js
