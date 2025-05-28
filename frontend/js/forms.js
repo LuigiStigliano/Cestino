@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const formDbId = document.getElementById('formDbId');
     const formObjectId = document.getElementById('formObjectId');
     const formComune = document.getElementById('formComune');
+    const formCodiceBelfiore = document.getElementById('formCodiceBelfiore'); // Assicurati che esista in index.html
     const formCodiceCatastale = document.getElementById('formCodiceCatastale');
     const formDataPredisposizione = document.getElementById('formDataPredisposizione');
     const formEdifcUso = document.getElementById('formEdifcUso');
@@ -62,12 +63,10 @@ document.addEventListener('DOMContentLoaded', function() {
     let confirmModal = confirmModalElement ? new bootstrap.Modal(confirmModalElement) : null;
     let confirmModalConfirmBtn = document.getElementById('confirmModalConfirmBtn');
 
-    // --- NUOVO: Nascondi i pulsanti TFO all'avvio ---
-    btnShowAddTfo.style.display = 'none';
-    btnModificaPredisposizione.style.display = 'none';
-    btnEliminaPredisposizione.style.display = 'none';
+    // --- AGGIUNTO: Configurazione API URL ---
+    const API_BASE_URL = 'http://127.0.0.1:8000'; // URL esplicito del backend
 
-    // --- Funzioni Modal ---
+    // --- Funzioni Modal (dalla versione base) ---
     function showModal(title, message, type = 'info') {
         if (!genericModal) {
             console.error("Modal generico non trovato!");
@@ -76,7 +75,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         document.getElementById('genericModalTitle').textContent = title;
         document.getElementById('genericModalBody').textContent = message;
-        // Potresti aggiungere logica per cambiare l'icona o il colore in base a 'type'
         genericModal.show();
     }
 
@@ -92,11 +90,9 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('confirmModalTitle').textContent = title;
         document.getElementById('confirmModalBody').textContent = message;
 
-        // Rimuovi eventuali listener precedenti per evitare esecuzioni multiple
         const newConfirmBtn = confirmModalConfirmBtn.cloneNode(true);
         confirmModalConfirmBtn.parentNode.replaceChild(newConfirmBtn, confirmModalConfirmBtn);
-        confirmModalConfirmBtn = newConfirmBtn; // Aggiorna il riferimento
-
+        confirmModalConfirmBtn = newConfirmBtn;
 
         const confirmHandler = () => {
             confirmModal.hide();
@@ -104,16 +100,26 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         confirmModalConfirmBtn.addEventListener('click', confirmHandler, { once: true });
-
         confirmModal.show();
     }
 
-    // --- NUOVO: Funzione per aggiornare la visibilità dei 3 pulsanti TFO ---
+    // --- Funzione per aggiornare la visibilità dei pulsanti TFO (dalla versione base) ---
     function updateTfoButtonsVisibility() {
+        // Modifica: Seleziona anche la riga della tabella
+        const predisposizioniTable = document.getElementById('predisposizioniTable');
         const hasRows = predisposizioniTableBody.rows.length > 0;
-        btnShowAddTfo.style.display = hasRows ? '' : 'none';
-        btnModificaPredisposizione.style.display = hasRows ? '' : 'none';
-        btnEliminaPredisposizione.style.display = hasRows ? '' : 'none';
+        const isRowSelected = selectedPredisposizioneRow !== null;
+
+        btnShowAddTfo.style.display = isRowSelected ? '' : 'none';
+        btnModificaPredisposizione.style.display = isRowSelected ? '' : 'none';
+        btnEliminaPredisposizione.style.display = isRowSelected ? '' : 'none';
+
+        // Nascondi se non ci sono righe
+        if (!hasRows) {
+            btnShowAddTfo.style.display = 'none';
+            btnModificaPredisposizione.style.display = 'none';
+            btnEliminaPredisposizione.style.display = 'none';
+        }
     }
 
 
@@ -125,7 +131,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     console.log("Applicazione Frontend Inizializzata.");
 
-    // --- NUOVO: Chiama la funzione per impostare lo stato iniziale dei pulsanti ---
+    // --- Chiama la funzione per impostare lo stato iniziale dei pulsanti ---
     updateTfoButtonsVisibility();
 
     // --- Logica Navigazione Sezioni ---
@@ -156,7 +162,38 @@ document.addEventListener('DOMContentLoaded', function() {
 
     showSection(sectionEdifici, navEdifici);
 
-    // --- Logica Sezione Lista Edifici ---
+    // --- AGGIUNTO: Funzione per chiamate API con XMLHttpRequest ---
+    function sendXhrRequest(method, endpoint, data, successCallback, errorCallback) {
+        const xhr = new XMLHttpRequest();
+        xhr.open(method, API_BASE_URL + endpoint, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        successCallback(response);
+                    } catch (e) {
+                        errorCallback('Errore nel parsing della risposta: ' + e.message);
+                    }
+                } else {
+                    let errorMsg = 'Errore nella richiesta: ' + xhr.status + ' ' + xhr.statusText;
+                    try {
+                         const errorResponse = JSON.parse(xhr.responseText);
+                         errorMsg += ' - ' + (errorResponse.detail || '');
+                    } catch(e) { /* ignore parsing error */ }
+                    errorCallback(errorMsg);
+                }
+            }
+        };
+        xhr.onerror = function() {
+            errorCallback('Errore di rete nella richiesta. Assicurati che il backend sia attivo su ' + API_BASE_URL);
+        };
+        xhr.send(JSON.stringify(data));
+    }
+
+
+    // --- Logica Sezione Lista Edifici (UNIFICATA) ---
     if (btnSalvaPredisposizione && buildingForm) {
         btnSalvaPredisposizione.addEventListener('click', function(event) {
             event.preventDefault();
@@ -168,6 +205,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const codCatastale = formCodiceCatastale.value;
             const lat = formLatitudine.value;
             const lon = formLongitudine.value;
+            const usoEdificio = formEdifcUso.value;
+            const codiceBelfiore = formCodiceBelfiore ? formCodiceBelfiore.value : '';
 
             if (!dbId && !objectId) {
                 showModal('Attenzione', 'Per favore, seleziona un edificio dalla mappa prima di salvare la predisposizione.', 'warning');
@@ -195,62 +234,90 @@ document.addEventListener('DOMContentLoaded', function() {
                 lat: lat,
                 lon: lon,
                 comune: comune,
+                codiceBelfiore: codiceBelfiore, // Aggiunto
                 codCatastale: codCatastale,
                 dataPred: dataPred,
+                usoEdificio: usoEdificio // Aggiunto
             };
 
-            if (existingRow) {
-                existingRow.dataset.indirizzo = predisposizioneData.indirizzo;
-                existingRow.dataset.lat = predisposizioneData.lat;
-                existingRow.dataset.lon = predisposizioneData.lon;
-                existingRow.dataset.codCatastale = predisposizioneData.codCatastale;
-                existingRow.cells[1].textContent = predisposizioneData.indirizzo;
-                existingRow.cells[2].textContent = predisposizioneData.comune;
-                existingRow.cells[3].textContent = predisposizioneData.codCatastale;
-                existingRow.cells[4].textContent = predisposizioneData.dataPred;
-                showModal('Successo', `Predisposizione edificio ID: ${predisposizioneData.id} modificata con successo.`, 'success');
-            } else {
-                const newRow = predisposizioniTableBody.insertRow();
-                newRow.dataset.id = predisposizioneData.id;
-                newRow.dataset.indirizzo = predisposizioneData.indirizzo;
-                newRow.dataset.lat = predisposizioneData.lat;
-                newRow.dataset.lon = predisposizioneData.lon;
-                newRow.dataset.codCatastale = predisposizioneData.codCatastale;
-                newRow.innerHTML = `
-                    <td>${predisposizioneData.id}</td>
-                    <td>${predisposizioneData.indirizzo}</td>
-                    <td>${predisposizioneData.comune}</td>
-                    <td>${predisposizioneData.codCatastale}</td>
-                    <td>${predisposizioneData.dataPred}</td>
-                `;
+            // *** AGGIUNTO: Chiamata API per salvare ***
+            const payload = {
+                id: parseInt(uniqueId),
+                indirizzo: indirizzo,
+                lat: lat ? parseFloat(lat) : null,
+                lon: lon ? parseFloat(lon) : null,
+                uso_edificio: usoEdificio || null,
+                comune: comune,
+                codice_belfiore: codiceBelfiore || null,
+                codice_catastale: codCatastale || null,
+                data_predisposizione: dataPred
+            };
 
-                if (!tfoDataStore[predisposizioneData.id]) {
-                    tfoDataStore[predisposizioneData.id] = [];
+            sendXhrRequest(
+                'POST',
+                '/predisposizione_fibra', // Usa il nuovo endpoint
+                payload,
+                function(response) { // Success Callback
+                    showModal('Successo', response.message, 'success');
+
+                    // Aggiorna UI solo dopo il successo della chiamata API
+                    if (existingRow) {
+                        existingRow.dataset.indirizzo = predisposizioneData.indirizzo;
+                        existingRow.dataset.lat = predisposizioneData.lat;
+                        existingRow.dataset.lon = predisposizioneData.lon;
+                        existingRow.dataset.codCatastale = predisposizioneData.codCatastale;
+                        existingRow.cells[1].textContent = predisposizioneData.indirizzo;
+                        existingRow.cells[2].textContent = predisposizioneData.comune;
+                        existingRow.cells[3].textContent = predisposizioneData.codCatastale;
+                        existingRow.cells[4].textContent = predisposizioneData.dataPred;
+                    } else {
+                        const newRow = predisposizioniTableBody.insertRow();
+                        newRow.dataset.id = predisposizioneData.id;
+                        newRow.dataset.indirizzo = predisposizioneData.indirizzo;
+                        newRow.dataset.lat = predisposizioneData.lat;
+                        newRow.dataset.lon = predisposizioneData.lon;
+                        newRow.dataset.codCatastale = predisposizioneData.codCatastale;
+                        // Aggiungi anche belfiore e uso_edificio se vuoi mostrarli o usarli
+                        newRow.innerHTML = `
+                            <td>${predisposizioneData.id}</td>
+                            <td>${predisposizioneData.indirizzo}</td>
+                            <td>${predisposizioneData.comune}</td>
+                            <td>${predisposizioneData.codCatastale}</td>
+                            <td>${predisposizioneData.dataPred}</td>
+                        `;
+
+                        if (!tfoDataStore[predisposizioneData.id]) {
+                            tfoDataStore[predisposizioneData.id] = [];
+                        }
+
+                        if (typeof window.markBuildingAsPredispostoOnMap === 'function') {
+                            window.markBuildingAsPredispostoOnMap(predisposizioneData.id);
+                        } else {
+                            console.error("Funzione markBuildingAsPredispostoOnMap non trovata.");
+                        }
+                    }
+
+                    updateTfoButtonsVisibility(); // Aggiorna visibilità pulsanti
+
+                    buildingForm.reset();
+                    formDbId.value = '';
+                    formObjectId.value = '';
+                    formLatitudine.value = '';
+                    formLongitudine.value = '';
+                    formEdifcUso.value = '';
+                    if(formCodiceBelfiore) formCodiceBelfiore.value = '';
+
+                },
+                function(error) { // Error Callback
+                    console.error('Errore durante il salvataggio:', error);
+                    showModal('Errore', `Errore durante il salvataggio: ${error}`, 'error');
                 }
-
-                if (typeof window.markBuildingAsPredispostoOnMap === 'function') {
-                    window.markBuildingAsPredispostoOnMap(predisposizioneData.id);
-                } else {
-                    console.error("Funzione markBuildingAsPredispostoOnMap non trovata.");
-                }
-
-                showModal('Successo', `Edificio ID: ${predisposizioneData.id} registrato come predisposto e aggiunto alla tabella.`, 'success');
-            }
-
-            // --- NUOVO: Aggiorna la visibilità dei pulsanti ---
-            updateTfoButtonsVisibility();
-
-            buildingForm.reset();
-            formDbId.value = '';
-            formObjectId.value = '';
-            formLatitudine.value = '';
-            formLongitudine.value = '';
-            formEdifcUso.value = '';
-
+            );
+            // *** FINE AGGIUNTA ***
         });
     }
 
-    // --- Logica Sezione Lista TFO ---
+    // --- Logica Sezione Lista TFO (dalla versione base, con aggiunta updateTfoButtonsVisibility) ---
     predisposizioniTableBody.addEventListener('click', (event) => {
         const row = event.target.closest('tr');
         if (!row) return;
@@ -275,6 +342,7 @@ document.addEventListener('DOMContentLoaded', function() {
             loadTfosForPredisposizione(predispoId);
             formTfoContainer.style.display = 'none';
         }
+        updateTfoButtonsVisibility(); // Aggiorna visibilità
     });
 
     function loadTfosForPredisposizione(predispoId) {
@@ -317,6 +385,7 @@ document.addEventListener('DOMContentLoaded', function() {
         formLatitudine.value = selectedPredisposizioneRow.dataset.lat || '';
         formLongitudine.value = selectedPredisposizioneRow.dataset.lon || '';
         formEdifcUso.value = ''; // O recuperare se possibile
+        // Potresti voler popolare anche Codice Belfiore qui se lo salvi nel dataset della riga
         showModal('Info', "Modulo registrazione edifici pre-compilato. Modifica i dati e salva.", 'info');
         showSection(sectionEdifici, navEdifici);
     });
@@ -330,24 +399,23 @@ document.addEventListener('DOMContentLoaded', function() {
         showConfirmModal(
             'Conferma Eliminazione',
             'Sei sicuro di voler eliminare questa predisposizione e tutte le TFO associate? L\'azione è irreversibile.',
-            () => { // Funzione da eseguire se l'utente conferma
+            () => {
                 const predispoIdToDelete = selectedPredisposizioneRow.dataset.id;
+
+                // *** AGGIUNTA: Chiamata API per eliminare (se implementata nel backend) ***
+                // Esempio: sendXhrRequest('DELETE', `/predisposizione/${predispoIdToDelete}`, {}, () => { ... }, () => { ... });
+                // Per ora, eliminiamo solo localmente e sulla mappa:
 
                 if (tfoDataStore[predispoIdToDelete]) {
                     delete tfoDataStore[predispoIdToDelete];
-                    console.log(`TFOs per l'edificio ID ${predispoIdToDelete} eliminate dallo store.`);
                 }
 
                 if (typeof window.unmarkBuildingAsPredispostoOnMap === 'function') {
                     window.unmarkBuildingAsPredispostoOnMap(predispoIdToDelete);
-                } else {
-                    console.error("Funzione unmarkBuildingAsPredispostoOnMap non trovata.");
                 }
 
                 selectedPredisposizioneRow.remove();
                 selectedPredisposizioneRow = null;
-
-                // --- NUOVO: Aggiorna la visibilità dei pulsanti ---
                 updateTfoButtonsVisibility();
 
                 tfoTableBody.innerHTML = '';
@@ -357,7 +425,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tfoActionButtons.style.display = 'none';
                 tfoSectionTitle.textContent = 'Terminazioni Ottiche (TFO)';
 
-                showModal('Successo', `Predisposizione edificio ID ${predispoIdToDelete} eliminata.`, 'success');
+                showModal('Successo', `Predisposizione edificio ID ${predispoIdToDelete} eliminata (localmente).`, 'success');
             }
         );
     });
@@ -399,6 +467,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clearTfoForm();
     });
 
+    // --- btnSalvaTfo (UNIFICATO) ---
     btnSalvaTfo.addEventListener('click', () => {
         const currentPredispoId = selectedPredisposizioneIdInput.value;
         if (!currentPredispoId) {
@@ -423,54 +492,70 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const rowIndexToEdit = formTfoRowIndex.value;
 
-        if (rowIndexToEdit !== '') {
-            const tfoIndex = parseInt(rowIndexToEdit);
-            tfoDataStore[currentPredispoId][tfoIndex] = tfoData;
-            const row = tfoTableBody.rows[tfoIndex];
-            row.cells[0].textContent = tfoData.scala;
-            row.cells[1].textContent = tfoData.piano;
-            row.cells[2].textContent = tfoData.interno;
-            row.cells[3].textContent = tfoData.dataPredTFO;
-            row.cells[4].textContent = tfoData.operatore;
-            row.cells[5].textContent = tfoData.codiceTfo;
-            row.cells[6].textContent = tfoData.codiceRoe;
-            row.classList.remove('selected');
-            selectedTfoRow = null;
-        } else {
-            const newIndex = tfoDataStore[currentPredispoId].length;
-            addTfoToTable(tfoData, currentPredispoId, true, newIndex);
-        }
+        // *** AGGIUNTO: Chiamata API per salvare TFO ***
+        const payload = {
+            id_abitazione: parseInt(currentPredispoId),
+            indirizzo: formIndirizzoTfo.value,
+            lat: formLatitudineTfo.value ? parseFloat(formLatitudineTfo.value) : null,
+            lon: formLongitudineTfo.value ? parseFloat(formLongitudineTfo.value) : null,
+            uso_edificio: null, // O recuperarlo se necessario
+            comune: document.getElementById('formComune').value, // Recupera il comune dalla sezione edifici (potrebbe essere vuoto)
+            codice_belfiore: document.getElementById('formCodiceBelfiore') ? document.getElementById('formCodiceBelfiore').value : null,
+            codice_catastale: formCodiceCatastaleTfo.value,
+            data_predisposizione: tfoData.dataPredTFO, // Usa la data TFO qui
+            scala: tfoData.scala || null,
+            piano: tfoData.piano || null,
+            interno: tfoData.interno || null,
+            id_operatore: tfoData.operatore || null,
+            id_tfo: tfoData.codiceTfo || null,
+            id_roe: tfoData.codiceRoe || null
+        };
 
-        formTfoContainer.style.display = 'none';
-        clearTfoForm();
-        loadTfosForPredisposizione(currentPredispoId);
-        showModal('Successo', 'TFO salvata!', 'success');
+        sendXhrRequest(
+            'PUT', // Usa PUT per inserire/aggiornare
+            '/inserisci_predisposizione_dati',
+            payload,
+            function(response) { // Success Callback
+                showModal('Successo', 'TFO salvata sul backend!', 'success');
+
+                // Aggiorna UI localmente
+                if (rowIndexToEdit !== '') {
+                    const tfoIndex = parseInt(rowIndexToEdit);
+                    tfoDataStore[currentPredispoId][tfoIndex] = tfoData;
+                    // L'aggiornamento della tabella avviene già in loadTfosForPredisposizione
+                } else {
+                    addTfoToTable(tfoData, currentPredispoId, true, tfoDataStore[currentPredispoId].length);
+                }
+
+                formTfoContainer.style.display = 'none';
+                clearTfoForm();
+                loadTfosForPredisposizione(currentPredispoId); // Ricarica per aggiornare tutto
+            },
+            function(error) { // Error Callback
+                console.error('Errore durante il salvataggio della TFO:', error);
+                showModal('Errore', `Errore durante il salvataggio della TFO: ${error}`, 'error');
+            }
+        );
+        // *** FINE AGGIUNTA ***
     });
+
 
     function addTfoToTable(data, predispoId, saveToStore = true, index) {
         if (saveToStore) {
             if (!tfoDataStore[predispoId]) {
                 tfoDataStore[predispoId] = [];
             }
-            if (index === tfoDataStore[predispoId].length) {
-                tfoDataStore[predispoId].push(data);
+            // Gestisci sia aggiunta che modifica
+            if (index < tfoDataStore[predispoId].length) {
+                tfoDataStore[predispoId][index] = data; // Modifica
+            } else {
+                 tfoDataStore[predispoId].push(data); // Aggiunta
             }
         }
 
-        const newRow = tfoTableBody.insertRow();
-        newRow.dataset.index = index;
-        newRow.innerHTML = `
-            <td>${data.scala}</td>
-            <td>${data.piano}</td>
-            <td>${data.interno}</td>
-            <td>${data.dataPredTFO}</td>
-            <td>${data.operatore}</td>
-            <td>${data.codiceTfo}</td>
-            <td>${data.codiceRoe}</td>
-        `;
-        tfoTableContainer.querySelector('p').style.display = 'none';
-        tfoTable.style.display = '';
-        tfoActionButtons.style.display = '';
+        // Ricarica la tabella invece di aggiungere solo una riga,
+        // per semplicità e coerenza, specialmente dopo le modifiche.
+        loadTfosForPredisposizione(predispoId);
     }
 
     tfoTableBody.addEventListener('click', (event) => {
@@ -533,9 +618,12 @@ document.addEventListener('DOMContentLoaded', function() {
                      return;
                 }
 
+                // *** AGGIUNTA: Chiamata API per eliminare TFO (se implementata) ***
+                // Per ora, eliminiamo solo localmente.
+
                 tfoDataStore[currentPredispoId].splice(tfoIndex, 1);
                 loadTfosForPredisposizione(currentPredispoId);
-                showModal('Successo', 'TFO eliminata.', 'success');
+                showModal('Successo', 'TFO eliminata (localmente).', 'success');
             }
         );
     });
