@@ -427,6 +427,221 @@ def inserisci_verifica(verifica: VerificaEdificio):
     finally:
         if 'cursor' in locals(): cursor.close()
         if 'conn' in locals(): conn.close()
-        
-# Per avviare (dalla cartella backend/app): uvicorn server:app --reload
-# o dalla cartella backend/: uvicorn app.server:app --reload
+
+# Modello per l'aggiornamento predisposto_fibra con tutti i dati del form
+class PredisposizioneFibraCompleta(BaseModel):
+    id: int
+    indirizzo: str
+    lat: Optional[float]
+    lon: Optional[float]
+    uso_edificio: Optional[str]
+    comune: str
+    codice_belfiore: Optional[str]
+    codice_catastale: Optional[str]
+    data_predisposizione: str
+
+# Nuovo endpoint per aggiornare predisposto_fibra e salvare tutti i dati nella tabella verifiche_edifici
+@app.post("/predisposizione_fibra")
+def aggiorna_predisposto_fibra(predisposizione: PredisposizioneFibraCompleta):
+    """
+    Aggiorna la colonna predisposto_fibra da null a true nella tabella catasto_abitazioni
+    e salva tutti i dati del form nella tabella verifiche_edifici.
+    """
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        # Verifica se l'edificio esiste
+        cursor.execute("SELECT id FROM catasto_abitazioni WHERE id = %s", (predisposizione.id,))
+        if cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail=f"Edificio con ID {predisposizione.id} non trovato")
+        # Aggiorna la colonna predisposto_fibra a true
+        cursor.execute("""
+            UPDATE catasto_abitazioni 
+            SET predisposto_fibra = true 
+            WHERE id = %s
+        """, (predisposizione.id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail=f"Nessun aggiornamento effettuato per l'edificio con ID {predisposizione.id}")
+        # Verifica se esiste già un record per questo edificio nella tabella verifiche_edifici
+        cursor.execute("SELECT id FROM verifiche_edifici WHERE id_abitazione = %s", (predisposizione.id,))
+        record_esistente = cursor.fetchone()
+        if record_esistente:
+            # Aggiorna il record esistente
+            cursor.execute("""
+                UPDATE verifiche_edifici SET
+                    predisposto_fibra = true,
+                    indirizzo = %s,
+                    lat = %s,
+                    lon = %s,
+                    uso_edificio = %s,
+                    comune = %s,
+                    codice_belfiore = %s,
+                    codice_catastale = %s,
+                    data_predisposizione = %s
+                WHERE id_abitazione = %s
+            """, (
+                predisposizione.indirizzo,
+                predisposizione.lat,
+                predisposizione.lon,
+                predisposizione.uso_edificio,
+                predisposizione.comune,
+                predisposizione.codice_belfiore,
+                predisposizione.codice_catastale,
+                predisposizione.data_predisposizione,
+                predisposizione.id
+            ))
+            message = f"Dati di predisposizione per l'edificio con ID {predisposizione.id} aggiornati con successo"
+        else:
+            # Inserisci un nuovo record
+            cursor.execute("""
+                INSERT INTO verifiche_edifici (
+                    id_abitazione, predisposto_fibra, indirizzo, lat, lon, 
+                    uso_edificio, comune, codice_belfiore, codice_catastale, 
+                    data_predisposizione, scala, piano, interno, 
+                    id_operatore, id_tfo, id_roe
+                ) VALUES (
+                    %s, true, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, NULL, NULL, NULL, NULL
+                )
+            """, (
+                predisposizione.id,
+                predisposizione.indirizzo,
+                predisposizione.lat,
+                predisposizione.lon,
+                predisposizione.uso_edificio,
+                predisposizione.comune,
+                predisposizione.codice_belfiore,
+                predisposizione.codice_catastale,
+                predisposizione.data_predisposizione
+            ))
+            message = f"Dati di predisposizione per l'edificio con ID {predisposizione.id} inseriti con successo"
+        conn.commit()
+        return {"status": "success", "message": message}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore durante l'aggiornamento: {str(e)}")
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
+
+# Modello per l'inserimento dati nella tabella verifiche_edifici
+class VerificaEdificioCompleta(BaseModel):
+    id_abitazione: int
+    indirizzo: str
+    lat: Optional[float]
+    lon: Optional[float]
+    uso_edificio: Optional[str]
+    comune: str
+    codice_belfiore: Optional[str]
+    codice_catastale: Optional[str]
+    data_predisposizione: str
+    scala: Optional[str]
+    piano: Optional[str]
+    interno: Optional[str]
+    id_operatore: Optional[str]
+    id_tfo: Optional[str]
+    id_roe: Optional[str]
+
+# Nuovo endpoint per inserire dati nella tabella verifiche_edifici
+@app.put("/inserisci_predisposizione_dati")
+def inserisci_predisposizione_dati(verifica: VerificaEdificioCompleta):
+    """
+    Inserisce o aggiorna i dati del form di predisposizione edificio e terminazioni ottiche
+    nella tabella verifiche_edifici.
+    """
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        # Verifica se l'edificio esiste
+        cursor.execute("SELECT id FROM catasto_abitazioni WHERE id = %s", (verifica.id_abitazione,))
+        if cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail=f"Edificio con ID {verifica.id_abitazione} non trovato")
+        # Verifica se esiste già un record per questo edificio
+        cursor.execute("SELECT id FROM verifiche_edifici WHERE id_abitazione = %s", (verifica.id_abitazione,))
+        record_esistente = cursor.fetchone()
+        if record_esistente:
+            # Recupera i dati esistenti prima di aggiornare
+            cursor.execute("""
+                SELECT indirizzo, lat, lon, uso_edificio, comune, codice_belfiore, codice_catastale, data_predisposizione
+                FROM verifiche_edifici
+                WHERE id_abitazione = %s
+            """, (verifica.id_abitazione,))
+            dati_esistenti = cursor.fetchone()
+            # Aggiorna solo i campi TFO, preservando i dati esistenti per gli altri campi
+            cursor.execute("""
+                UPDATE verifiche_edifici SET
+                    predisposto_fibra = true,
+                    indirizzo = COALESCE(%s, indirizzo),
+                    lat = COALESCE(%s, lat),
+                    lon = COALESCE(%s, lon),
+                    uso_edificio = COALESCE(%s, uso_edificio),
+                    comune = COALESCE(%s, comune),
+                    codice_belfiore = COALESCE(%s, codice_belfiore),
+                    codice_catastale = COALESCE(%s, codice_catastale),
+                    data_predisposizione = COALESCE(%s, data_predisposizione),
+                    scala = %s,
+                    piano = %s,
+                    interno = %s,
+                    id_operatore = %s,
+                    id_tfo = %s,
+                    id_roe = %s
+                WHERE id_abitazione = %s
+            """, (
+                verifica.indirizzo if verifica.indirizzo else None,
+                verifica.lat,
+                verifica.lon,
+                verifica.uso_edificio,
+                verifica.comune if verifica.comune else dati_esistenti[4],
+                verifica.codice_belfiore,
+                verifica.codice_catastale,
+                verifica.data_predisposizione if verifica.data_predisposizione else None,
+                verifica.scala,
+                verifica.piano,
+                verifica.interno,
+                verifica.id_operatore,
+                verifica.id_tfo,
+                verifica.id_roe,
+                verifica.id_abitazione
+            ))
+            message = f"Dati di predisposizione per l'edificio con ID {verifica.id_abitazione} aggiornati con successo"
+        else:
+            # Inserisci un nuovo record
+            cursor.execute("""
+                INSERT INTO verifiche_edifici (
+                    id_abitazione, predisposto_fibra, indirizzo, lat, lon, 
+                    uso_edificio, comune, codice_belfiore, codice_catastale, 
+                    data_predisposizione, scala, piano, interno, 
+                    id_operatore, id_tfo, id_roe
+                ) VALUES (
+                    %s, true, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+            """, (
+                verifica.id_abitazione,
+                verifica.indirizzo,
+                verifica.lat,
+                verifica.lon,
+                verifica.uso_edificio,
+                verifica.comune,
+                verifica.codice_belfiore,
+                verifica.codice_catastale,
+                verifica.data_predisposizione,
+                verifica.scala,
+                verifica.piano,
+                verifica.interno,
+                verifica.id_operatore,
+                verifica.id_tfo,
+                verifica.id_roe
+            ))
+            message = f"Dati di predisposizione per l'edificio con ID {verifica.id_abitazione} inseriti con successo"
+        conn.commit()
+        return {
+            "status": "success", 
+            "message": message
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore durante l'inserimento dei dati: {str(e)}")
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
