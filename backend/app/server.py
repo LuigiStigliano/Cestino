@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, Query
-from typing import List, Optional
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Query, Path, Body
+from typing import List, Optional, Dict
+from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 import os
 import json
@@ -9,6 +9,8 @@ import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from fastapi.responses import JSONResponse
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 # Carica variabili da .env che si trova una cartella sopra (nella root di backend/)
 dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
@@ -22,32 +24,24 @@ DB_NAME = os.getenv("POSTGRES_DB", "aquila_gis")
 DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 
 DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+DB_CONFIG = {
+    'host': DB_HOST,
+    'database': DB_NAME,
+    'user': DB_USER,
+    'password': DB_PASSWORD,
+    'port': DB_PORT
+}
 
-# Modello Pydantic per la risposta
-class Abitazione(BaseModel):
-    objectid: Optional[int]
-    edifc_uso: Optional[str]
-    edifc_ty: Optional[str]
-    edifc_sot: Optional[str]
-    classid: Optional[str]
-    edifc_nome: Optional[str]
-    edifc_stat: Optional[str]
-    edifc_at: Optional[float]
-    scril: Optional[str]
-    meta_ist: Optional[str]
-    edifc_mon: Optional[str]
-    shape_length: Optional[float]
-    shape_area: Optional[float]
-    # geometry non serializzata qui per semplicità
-
-app = FastAPI(title="Mio Progetto GIS Backend")
+engine = create_engine(DATABASE_URL)
+app = FastAPI(title="Mio Progetto GIS Backend - API Edifici e TFO")
 
 # Configurazione CORS
 origins = [
     "http://localhost",
     "http://127.0.0.1",
     "null", # Necessario se apri frontend/index.html direttamente come file
-    # Aggiungi altre origini se necessario, es. http://localhost:xxxx se usi un live server per il frontend
+    "http://localhost:8000", # Aggiungi se usi un live server per il frontend
+    "http://127.0.0.1:8000",
 ]
 
 app.add_middleware(
@@ -58,586 +52,388 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-engine = create_engine(DATABASE_URL)
+# --- Funzioni Utilità ---
 
-# Funzione per ottenere le colonne effettive della tabella
-def get_table_columns(table_name):
-    query = f"""
-    SELECT column_name 
-    FROM information_schema.columns 
-    WHERE table_name = '{table_name}'
-    """
-    with engine.connect() as conn:
-        result = conn.execute(text(query))
-        columns = [row[0] for row in result]
-        print(f"Colonne disponibili nella tabella {table_name}: {columns}")
-        return columns
+def get_db_connection():
+    """Restituisce una connessione psycopg2."""
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        return conn
+    except psycopg2.Error as e:
+        print(f"Errore di connessione al database: {e}")
+        raise HTTPException(status_code=500, detail="Errore di connessione al database")
 
-# Funzione di utilità per convertire valori in formati JSON-compatibili
 def json_serializable(value):
-    if isinstance(value, decimal.Decimal):
-        return float(value)
-    elif isinstance(value, datetime.datetime):
-        return value.isoformat()
-    elif isinstance(value, datetime.date):
-        return value.isoformat()
+    """Converte tipi non serializzabili."""
+    if isinstance(value, (decimal.Decimal, float)):
+        return float(value) if value is not None else None
+    elif isinstance(value, (datetime.datetime, datetime.date)):
+        return value.isoformat() if value is not None else None
     return value
 
-# Funzione per validare le geometrie GeoJSON
 def validate_geometry(geom_json):
+    """Valida la geometria GeoJSON."""
     try:
         if isinstance(geom_json, str):
             geom = json.loads(geom_json)
         else:
             geom = geom_json
-            
         if not geom or "type" not in geom or "coordinates" not in geom:
             return False, "Geometria incompleta"
-        
-        # Verifica che le coordinate siano numeri validi
-        if geom["type"] == "Point":
-            if not all(isinstance(c, (int, float)) for c in geom["coordinates"]):
-                return False, "Coordinate non valide"
-        
         return True, geom
     except Exception as e:
         return False, str(e)
+
+def get_table_columns(table_name):
+    """Ottiene le colonne effettive della tabella."""
+    query = f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table_name}'"
+    with engine.connect() as conn:
+        result = conn.execute(text(query))
+        return [row[0] for row in result]
+
+# --- Modelli Pydantic ---
+
+class BaseResponse(BaseModel):
+    status: str = "success"
+    message: Optional[str] = None
+
+class PredisposizioneBase(BaseModel):
+    id_abitazione: int
+    indirizzo: Optional[str] = None
+    comune: Optional[str] = None
+    codice_catastale: Optional[str] = None
+    data_predisposizione: Optional[datetime.date] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    uso_edificio: Optional[str] = None
+    codice_belfiore: Optional[str] = None
+
+class PredisposizioneInDB(PredisposizioneBase):
+    id: int # ID univoco della tabella verifiche_edifici
+
+class TfoBase(BaseModel):
+    id_abitazione: int
+    data_predisposizione: Optional[datetime.date] = None
+    scala: Optional[str] = None
+    piano: Optional[str] = None
+    interno: Optional[str] = None
+    id_operatore: Optional[str] = None
+    id_tfo: Optional[str] = None
+    id_roe: Optional[str] = None
+
+class TfoCreate(TfoBase):
+    pass
+
+class TfoInDB(TfoBase):
+    id: int # ID univoco della tabella verifiche_edifici
+    indirizzo: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    codice_catastale: Optional[str] = None
+
+class PredisposizioneCreate(BaseModel):
+    id: int # Questo è l'id_abitazione da catasto_abitazioni
+    indirizzo: str
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    uso_edificio: Optional[str] = None
+    comune: str
+    codice_belfiore: Optional[str] = None
+    codice_catastale: Optional[str] = None
+    data_predisposizione: datetime.date
+
+# --- Endpoint Radice ---
 
 @app.get("/")
 def root():
     return {"message": "Server FastAPI per Mio Progetto GIS attivo!"}
 
-@app.get("/abitazioni", response_model=List[Abitazione])
-def get_abitazioni(limit: int = 10):
-    """Restituisce una lista di abitazioni dal database"""
-    # Ottieni le colonne effettive della tabella
-    columns = get_table_columns("catasto_abitazioni")
-    
-    # Costruisci la query dinamicamente in base alle colonne disponibili
-    select_columns = ", ".join([col for col in columns if col != "geometry"])
-    
-    with engine.connect() as conn:
-        query = f"""
-            SELECT {select_columns}
-            FROM catasto_abitazioni
-            LIMIT :limit
-        """
-        result = conn.execute(text(query), {"limit": limit})
-        rows = result.fetchall()
-        if not rows:
-            raise HTTPException(status_code=404, detail="Nessuna abitazione trovata")
-        
-        # Converti Righe in dizionari prima di passarli al modello Pydantic
-        # Converti anche i valori datetime in stringhe ISO
-        processed_rows = []
-        for row in rows:
-            row_dict = {k: json_serializable(v) for k, v in row._mapping.items() if k in Abitazione.__annotations__}
-            processed_rows.append(Abitazione(**row_dict))
-        
-        return processed_rows
-
-@app.get("/geojson")
-def get_geojson_data(
-    minx: Optional[float] = None, miny: Optional[float] = None, maxx: Optional[float] = None, maxy: Optional[float] = None
-):
-    """Restituisce tutte le abitazioni o quelle filtrate come FeatureCollection GeoJSON."""
-    # Ottieni le colonne effettive della tabella
-    columns = get_table_columns("catasto_abitazioni")
-    
-    # Costruisci la query dinamicamente in base alle colonne disponibili
-    select_columns = ", ".join([col for col in columns if col != "geometry"])
-    
-    params = {}
-    where_clauses = []
-
-    if minx is not None and miny is not None and maxx is not None and maxy is not None:
-        where_clauses.append("ST_Intersects(geometry, ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 4326))")
-        params = {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
-
-    where_statement = ""
-    if where_clauses:
-        where_statement = "WHERE " + " AND ".join(where_clauses)
-
-    # Ottieni il SRID originale dei dati
-    srid_query = "SELECT ST_SRID(geometry) FROM catasto_abitazioni LIMIT 1"
-    with engine.connect() as conn:
-        srid_result = conn.execute(text(srid_query))
-        original_srid = srid_result.scalar()
-    
-    # Costruisci la query in base al SRID originale
-    if original_srid != 4326:
-        geometry_expr = "ST_AsGeoJSON(ST_Transform(geometry, 4326), 20) AS geometry"
-    else:
-        geometry_expr = "ST_AsGeoJSON(geometry, 20) AS geometry"
-    
-    query_string = f"""
-        SELECT
-            {select_columns},
-            {geometry_expr}
-        FROM catasto_abitazioni
-        {where_statement}
-        LIMIT 2000
-    """
-
-    features = []
-    with engine.connect() as conn:
-        result = conn.execute(text(query_string), params)
-        for row_proxy in result:
-            row = row_proxy._mapping
-            geom_str = row.get("geometry")
-            
-            # Crea una copia del dizionario senza la geometria
-            properties = {k: v for k, v in row.items() if k != "geometry"}
-            
-            # Converti tutti i valori in formati JSON-compatibili
-            properties = {k: json_serializable(v) for k, v in properties.items()}
-
-            # Valida la geometria prima di includerla
-            if geom_str:
-                is_valid, geom_result = validate_geometry(geom_str)
-                if is_valid:
-                    feature = {
-                        "type": "Feature",
-                        "geometry": geom_result,
-                        "properties": properties
-                    }
-                    features.append(feature)
-                else:
-                    print(f"Geometria non valida per ID {properties.get('objectid')}: {geom_result}")
-            
-    return {
-        "type": "FeatureCollection",
-        "features": features
-    }
+# --- Endpoint GeoJSON ---
 
 @app.get("/geojson/bbox")
 def get_geojson_by_bbox(
-    west: float = Query(..., description="Longitudine ovest del bounding box"),
-    south: float = Query(..., description="Latitudine sud del bounding box"),
-    east: float = Query(..., description="Longitudine est del bounding box"),
-    north: float = Query(..., description="Latitudine nord del bounding box"),
-    zoom: int = Query(..., description="Livello di zoom corrente"),
-    geometry_type: str = Query("both", description="Tipo di geometria da restituire: 'both', 'centroid', 'polygon'")
+    west: float = Query(..., description="Longitudine ovest"),
+    south: float = Query(..., description="Latitudine sud"),
+    east: float = Query(..., description="Longitudine est"),
+    north: float = Query(..., description="Latitudine nord"),
+    zoom: int = Query(..., description="Livello di zoom"),
 ):
     """
-    Restituisce le abitazioni come FeatureCollection GeoJSON 
-    filtrate per bounding box e livello di zoom
+    Restituisce le abitazioni come GeoJSON con indicazione 'predisposto_fibra'.
+    Restituisce poligoni e centroidi come feature separate.
     """
-    # Ottieni le colonne effettive della tabella
-    columns = get_table_columns("catasto_abitazioni")
-    
-    # Costruisci la query dinamicamente in base alle colonne disponibili
-    select_columns = ", ".join([col for col in columns if col != "geometry" and col != "centroide"])
-    
-    # Ottieni il SRID originale dei dati
+    # Ottieni colonne effettive per evitare errori se mancano
+    available_columns = get_table_columns("catasto_abitazioni")
+    select_cols = [f"c.{col}" for col in available_columns if col not in ["geometry", "centroide"]]
+    select_statement = ", ".join(select_cols)
+
+    query = f"""
+        SELECT
+            {select_statement},
+            COALESCE(c.predisposto_fibra, false) AS predisposto_fibra, -- *** AGGIUNTO CAMPO con COALESCE ***
+            ST_AsGeoJSON(c.geometry, 20) AS geometry,
+            ST_AsGeoJSON(c.centroide, 20) AS centroide_geojson
+        FROM catasto_abitazioni c
+        WHERE ST_Intersects(
+            c.geometry,
+            ST_MakeEnvelope(:west, :south, :east, :north, 4326)
+        )
+        LIMIT 3000; -- Limite per evitare sovraccarichi
+    """
+    params = {"west": west, "south": south, "east": east, "north": north}
+    features = []
+
     try:
         with engine.connect() as conn:
-            srid_result = conn.execute(text("SELECT ST_SRID(geometry) FROM catasto_abitazioni LIMIT 1"))
-            original_srid = srid_result.scalar()
-            print(f"SRID originale dei dati: {original_srid}")
-    except Exception as e:
-        print(f"Errore nel recupero del SRID: {str(e)}")
-        original_srid = 4326  # Valore predefinito in caso di errore
-    
-    # Costruisci la query in base al SRID originale
-    base_query = f"""
-        SELECT 
-            {select_columns}
-    """
-    
-    # Gestione delle geometrie senza semplificazione e con massima precisione
-    if geometry_type == "centroid":
-        # Utilizziamo la colonna centroide se esiste, altrimenti calcoliamo il centroide dalla geometria
-        base_query += """
-            ,\n            CASE 
-                WHEN centroide IS NOT NULL THEN ST_AsGeoJSON(centroide, 20)
-                ELSE ST_AsGeoJSON(ST_Centroid(geometry), 20) 
-            END AS geometry
-        """
-    elif geometry_type == "polygon":
-        if original_srid != 4326:
-            base_query += ",\n            ST_AsGeoJSON(ST_Transform(geometry, 4326), 20) AS geometry"
-        else:
-            base_query += ",\n            ST_AsGeoJSON(geometry, 20) AS geometry"
-    elif geometry_type == "both":
-        # Per "both", restituiamo sia la geometria completa che il centroide
-        if original_srid != 4326:
-            base_query += """
-                ,\n            ST_AsGeoJSON(ST_Transform(geometry, 4326), 20) AS geometry
-                ,\n            CASE 
-                    WHEN centroide IS NOT NULL THEN ST_AsGeoJSON(centroide, 20)
-                    ELSE ST_AsGeoJSON(ST_Centroid(ST_Transform(geometry, 4326)), 20) 
-                END AS centroide_geojson
-            """
-        else:
-            base_query += """
-                ,\n            ST_AsGeoJSON(geometry, 20) AS geometry
-                ,\n            CASE 
-                    WHEN centroide IS NOT NULL THEN ST_AsGeoJSON(centroide, 20)
-                    ELSE ST_AsGeoJSON(ST_Centroid(geometry), 20) 
-                END AS centroide_geojson
-            """
-    
-    # Costruisci la clausola WHERE con la corretta trasformazione del bounding box
-    if original_srid != 4326:
-        where_clause = """
-            FROM catasto_abitazioni
-            WHERE 
-                ST_Intersects(
-                    geometry, 
-                    ST_Transform(
-                        ST_MakeEnvelope(:west, :south, :east, :north, 4326),
-                        :original_srid
-                    )
-                )
-        """
-    else:
-        where_clause = """
-            FROM catasto_abitazioni
-            WHERE 
-                ST_Intersects(
-                    geometry, 
-                    ST_MakeEnvelope(:west, :south, :east, :north, 4326)
-                )
-        """
-    
-    query = base_query + where_clause
-    
-    params = {
-        "west": west,
-        "south": south,
-        "east": east,
-        "north": north,
-        "original_srid": original_srid
-    }
-    
-    features = []
-    with engine.connect() as conn:
-        try:
             result = conn.execute(text(query), params)
-            for row in result:
-                props = dict(row._mapping)
-                
-                # Converti tutti i valori in formati JSON-compatibili
-                for k, v in list(props.items()):
-                    props[k] = json_serializable(v)
-                
-                if geometry_type == "both":
-                    geom = props.pop("geometry", None)
-                    centroide_geojson = props.pop("centroide_geojson", None)
-                    
-                    # Valida e aggiungi la geometria del poligono
-                    if geom:
-                        is_valid, geom_result = validate_geometry(geom)
-                        if is_valid:
-                            # Aggiungi il centroide come proprietà
-                            if centroide_geojson:
-                                is_valid_centroid, centroid_result = validate_geometry(centroide_geojson)
-                                if is_valid_centroid:
-                                    props["centroid"] = centroid_result
-                            
-                            features.append({
-                                "type": "Feature",
-                                "geometry": geom_result,
-                                "properties": props
-                            })
-                            
-                            # Aggiungi anche il centroide come feature separata
-                            if centroide_geojson:
-                                is_valid_centroid, centroid_result = validate_geometry(centroide_geojson)
-                                if is_valid_centroid:
-                                    centroid_props = {
-                                        "is_centroid": True,
-                                        "parent_id": props.get("objectid") or props.get("id"),
-                                        "parent_name": props.get("edifc_nome", "")
-                                    }
-                                    features.append({
-                                        "type": "Feature",
-                                        "geometry": centroid_result,
-                                        "properties": centroid_props
-                                    })
-                        else:
-                            print(f"Geometria non valida per objectid {props.get('objectid')}: {geom_result}")
-                else:
-                    geom = props.pop("geometry", None)
-                    if geom:
-                        is_valid, geom_result = validate_geometry(geom)
-                        if is_valid:
-                            features.append({
-                                "type": "Feature",
-                                "geometry": geom_result,
-                                "properties": props
-                            })
-                        else:
-                            print(f"Geometria non valida per objectid {props.get('objectid')}: {geom_result}")
-            
-            return JSONResponse({
-                "type": "FeatureCollection",
-                "features": features
-            })
-        except Exception as e:
-            # Gestione migliorata degli errori
-            error_detail = str(e)
-            print(f"Errore nell'esecuzione della query: {error_detail}")
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "error": "Errore nel recupero dei dati",
-                    "detail": error_detail,
-                    "type": "database_error"
-                }
-            )
+            for row_proxy in result:
+                row = row_proxy._mapping
+                props = {k: json_serializable(v) for k, v in row.items() if k not in ["geometry", "centroide_geojson"]}
+                geom_str = row.get("geometry")
+                centroide_str = row.get("centroide_geojson")
 
-# ⚠️ AGGIUNTA: modello per il form da frontend
-class VerificaEdificio(BaseModel):
-    id_edificio: int
-    predisposto_fibra: bool
-    note: str | None = None
-    operatore: str
+                # Aggiungi poligono
+                if geom_str:
+                    is_valid, geom = validate_geometry(geom_str)
+                    if is_valid:
+                        features.append({
+                            "type": "Feature",
+                            "geometry": geom,
+                            "properties": props.copy()
+                        })
 
-# ⚠️ AGGIUNTA: configurazione DB anche per psycopg2
-import psycopg2
-DB_CONFIG = {
-    'host': DB_HOST,
-    'database': DB_NAME,
-    'user': DB_USER,
-    'password': DB_PASSWORD,
-    'port': DB_PORT
-}
+                # Aggiungi centroide
+                if centroide_str:
+                    is_valid_c, geom_c = validate_geometry(centroide_str)
+                    if is_valid_c:
+                         features.append({
+                            "type": "Feature",
+                            "geometry": geom_c,
+                            "properties": {
+                                "is_centroid": True,
+                                "parent_id": props.get("id") or props.get("objectid"),
+                                "predisposto_fibra": props.get("predisposto_fibra")
+                            }
+                        })
+    except Exception as e:
+        print(f"Errore GeoJSON BBOX: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore nel recupero GeoJSON: {e}")
 
-# ⚠️ AGGIUNTA: endpoint POST per inserimento verifica
-@app.post("/verifica")
-def inserisci_verifica(verifica: VerificaEdificio):
+    return {"type": "FeatureCollection", "features": features}
+
+# --- Endpoint Predisposizioni ---
+
+@app.get("/predisposizioni", response_model=List[PredisposizioneInDB])
+def get_predisposizioni():
+    """Restituisce tutte le predisposizioni registrate (una per edificio)."""
+    query = """
+        SELECT DISTINCT ON (v.id_abitazione) v.*
+        FROM verifiche_edifici v
+        WHERE v.predisposto_fibra = true
+        ORDER BY v.id_abitazione, v.id ASC;
+    """ # Prende il primo record (più vecchio) per ogni edificio predisposto
+    conn = None
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        return [PredisposizioneInDB(**{k: json_serializable(v) for k, v in row.items()}) for row in rows]
+    except Exception as e:
+        print(f"Errore GET /predisposizioni: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore nel recupero delle predisposizioni: {e}")
+    finally:
+        if conn: conn.close()
+
+@app.post("/predisposizioni", response_model=PredisposizioneInDB, status_code=201)
+def create_predisposizione(pred: PredisposizioneCreate):
+    """Crea una nuova predisposizione o aggiorna quella esistente."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        cursor.execute("SELECT id FROM catasto_abitazioni WHERE id = %s", (pred.id,))
+        if cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail=f"Edificio con ID {pred.id} non trovato")
+
+        cursor.execute("SELECT id FROM verifiche_edifici WHERE id_abitazione = %s AND id_tfo IS NULL", (pred.id,))
+        existing = cursor.fetchone()
+
+        if existing:
+            update_query = """
+                UPDATE verifiche_edifici SET
+                    predisposto_fibra = true, indirizzo = %s, lat = %s, lon = %s,
+                    uso_edificio = %s, comune = %s, codice_belfiore = %s,
+                    codice_catastale = %s, data_predisposizione = %s
+                WHERE id = %s RETURNING *;
+            """
+            cursor.execute(update_query, (
+                pred.indirizzo, pred.lat, pred.lon, pred.uso_edificio, pred.comune,
+                pred.codice_belfiore, pred.codice_catastale, pred.data_predisposizione,
+                existing['id']
+            ))
+        else:
+            insert_query = """
+                INSERT INTO verifiche_edifici (
+                    id_abitazione, predisposto_fibra, indirizzo, lat, lon, uso_edificio,
+                    comune, codice_belfiore, codice_catastale, data_predisposizione
+                ) VALUES (%s, true, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *;
+            """
+            cursor.execute(insert_query, (
+                pred.id, pred.indirizzo, pred.lat, pred.lon, pred.uso_edificio,
+                pred.comune, pred.codice_belfiore, pred.codice_catastale, pred.data_predisposizione
+            ))
+
+        new_record = cursor.fetchone()
+        cursor.execute("UPDATE catasto_abitazioni SET predisposto_fibra = true WHERE id = %s", (pred.id,))
+        conn.commit()
+        return PredisposizioneInDB(**{k: json_serializable(v) for k, v in new_record.items()})
+
+    except HTTPException:
+        if conn: conn.rollback()
+        raise
+    except Exception as e:
+        if conn: conn.rollback()
+        print(f"Errore POST /predisposizioni: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore durante la creazione/aggiornamento: {e}")
+    finally:
+        if conn: conn.close()
+
+@app.delete("/predisposizioni/{predisposizione_id}", response_model=BaseResponse)
+def delete_predisposizione(predisposizione_id: int = Path(..., description="ID abitazione")):
+    """Elimina una predisposizione e tutte le TFO associate."""
+    conn = None
+    try:
+        conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO verifiche_edifici (id_edificio, predisposto_fibra, note, operatore)
-            VALUES (%s, %s, %s, %s)
-        """, (
-            verifica.id_edificio,
-            verifica.predisposto_fibra,
-            verifica.note,
-            verifica.operatore
+        cursor.execute("DELETE FROM verifiche_edifici WHERE id_abitazione = %s", (predisposizione_id,))
+        deleted_count = cursor.rowcount
+        if deleted_count == 0:
+            raise HTTPException(status_code=404, detail=f"Nessuna predisposizione trovata per ID {predisposizione_id}")
+        cursor.execute("UPDATE catasto_abitazioni SET predisposto_fibra = NULL WHERE id = %s", (predisposizione_id,))
+        conn.commit()
+        return BaseResponse(message=f"Predisposizione e {deleted_count} record associati eliminati per ID {predisposizione_id}")
+    except HTTPException:
+        if conn: conn.rollback()
+        raise
+    except Exception as e:
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Errore durante l'eliminazione: {e}")
+    finally:
+        if conn: conn.close()
+
+# --- Endpoint TFO ---
+
+@app.get("/predisposizioni/{predisposizione_id}/tfos", response_model=List[TfoInDB])
+def get_tfos_for_predisposizione(predisposizione_id: int = Path(..., description="ID abitazione")):
+    """Restituisce tutte le TFO per un edificio."""
+    query = """
+        SELECT id, id_abitazione, data_predisposizione, scala, piano, interno,
+               id_operatore, id_tfo, id_roe, indirizzo, lat, lon, codice_catastale
+        FROM verifiche_edifici
+        WHERE id_abitazione = %s AND id_tfo IS NOT NULL;
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(query, (predisposizione_id,))
+        rows = cursor.fetchall()
+        return [TfoInDB(**{k: json_serializable(v) for k, v in row.items()}) for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore recupero TFO: {e}")
+    finally:
+        if conn: conn.close()
+
+@app.post("/tfos", response_model=TfoInDB, status_code=201)
+def create_tfo(tfo: TfoCreate):
+    """Crea una nuova TFO."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT * FROM verifiche_edifici WHERE id_abitazione = %s ORDER BY id ASC LIMIT 1", (tfo.id_abitazione,))
+        pred_base = cursor.fetchone()
+        if not pred_base:
+            raise HTTPException(status_code=404, detail=f"Predisposizione base non trovata per ID {tfo.id_abitazione}")
+
+        insert_query = """
+            INSERT INTO verifiche_edifici (
+                id_abitazione, predisposto_fibra, indirizzo, lat, lon, uso_edificio,
+                comune, codice_belfiore, codice_catastale, data_predisposizione,
+                scala, piano, interno, id_operatore, id_tfo, id_roe
+            ) VALUES (%s, true, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *;
+        """
+        cursor.execute(insert_query, (
+            tfo.id_abitazione, pred_base['indirizzo'], pred_base['lat'], pred_base['lon'], pred_base['uso_edificio'],
+            pred_base['comune'], pred_base['codice_belfiore'], pred_base['codice_catastale'],
+            tfo.data_predisposizione, tfo.scala, tfo.piano, tfo.interno,
+            tfo.id_operatore, tfo.id_tfo, tfo.id_roe
         ))
+        new_tfo = cursor.fetchone()
         conn.commit()
-        return {"status": "success", "message": "Verifica salvata con successo"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore: {e}")
-    finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
-
-# Modello per l'aggiornamento predisposto_fibra con tutti i dati del form
-class PredisposizioneFibraCompleta(BaseModel):
-    id: int
-    indirizzo: str
-    lat: Optional[float]
-    lon: Optional[float]
-    uso_edificio: Optional[str]
-    comune: str
-    codice_belfiore: Optional[str]
-    codice_catastale: Optional[str]
-    data_predisposizione: str
-
-# Nuovo endpoint per aggiornare predisposto_fibra e salvare tutti i dati nella tabella verifiche_edifici
-@app.post("/predisposizione_fibra")
-def aggiorna_predisposto_fibra(predisposizione: PredisposizioneFibraCompleta):
-    """
-    Aggiorna la colonna predisposto_fibra da null a true nella tabella catasto_abitazioni
-    e salva tutti i dati del form nella tabella verifiche_edifici.
-    """
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-        # Verifica se l'edificio esiste
-        cursor.execute("SELECT id FROM catasto_abitazioni WHERE id = %s", (predisposizione.id,))
-        if cursor.fetchone() is None:
-            raise HTTPException(status_code=404, detail=f"Edificio con ID {predisposizione.id} non trovato")
-        # Aggiorna la colonna predisposto_fibra a true
-        cursor.execute("""
-            UPDATE catasto_abitazioni 
-            SET predisposto_fibra = true 
-            WHERE id = %s
-        """, (predisposizione.id,))
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail=f"Nessun aggiornamento effettuato per l'edificio con ID {predisposizione.id}")
-        # Verifica se esiste già un record per questo edificio nella tabella verifiche_edifici
-        cursor.execute("SELECT id FROM verifiche_edifici WHERE id_abitazione = %s", (predisposizione.id,))
-        record_esistente = cursor.fetchone()
-        if record_esistente:
-            # Aggiorna il record esistente
-            cursor.execute("""
-                UPDATE verifiche_edifici SET
-                    predisposto_fibra = true,
-                    indirizzo = %s,
-                    lat = %s,
-                    lon = %s,
-                    uso_edificio = %s,
-                    comune = %s,
-                    codice_belfiore = %s,
-                    codice_catastale = %s,
-                    data_predisposizione = %s
-                WHERE id_abitazione = %s
-            """, (
-                predisposizione.indirizzo,
-                predisposizione.lat,
-                predisposizione.lon,
-                predisposizione.uso_edificio,
-                predisposizione.comune,
-                predisposizione.codice_belfiore,
-                predisposizione.codice_catastale,
-                predisposizione.data_predisposizione,
-                predisposizione.id
-            ))
-            message = f"Dati di predisposizione per l'edificio con ID {predisposizione.id} aggiornati con successo"
-        else:
-            # Inserisci un nuovo record
-            cursor.execute("""
-                INSERT INTO verifiche_edifici (
-                    id_abitazione, predisposto_fibra, indirizzo, lat, lon, 
-                    uso_edificio, comune, codice_belfiore, codice_catastale, 
-                    data_predisposizione, scala, piano, interno, 
-                    id_operatore, id_tfo, id_roe
-                ) VALUES (
-                    %s, true, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, NULL, NULL, NULL, NULL
-                )
-            """, (
-                predisposizione.id,
-                predisposizione.indirizzo,
-                predisposizione.lat,
-                predisposizione.lon,
-                predisposizione.uso_edificio,
-                predisposizione.comune,
-                predisposizione.codice_belfiore,
-                predisposizione.codice_catastale,
-                predisposizione.data_predisposizione
-            ))
-            message = f"Dati di predisposizione per l'edificio con ID {predisposizione.id} inseriti con successo"
-        conn.commit()
-        return {"status": "success", "message": message}
+        return TfoInDB(**{k: json_serializable(v) for k, v in new_tfo.items()})
     except HTTPException:
+        if conn: conn.rollback()
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore durante l'aggiornamento: {str(e)}")
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Errore creazione TFO: {e}")
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        if conn: conn.close()
 
-# Modello per l'inserimento dati nella tabella verifiche_edifici
-class VerificaEdificioCompleta(BaseModel):
-    id_abitazione: int
-    indirizzo: str
-    lat: Optional[float]
-    lon: Optional[float]
-    uso_edificio: Optional[str]
-    comune: str
-    codice_catastale: Optional[str]
-    data_predisposizione: str
-    scala: Optional[str]
-    piano: Optional[str]
-    interno: Optional[str]
-    id_operatore: Optional[str]
-    id_tfo: Optional[str]
-    id_roe: Optional[str]
-
-# Nuovo endpoint per inserire dati nella tabella verifiche_edifici
-@app.put("/inserisci_predisposizione_dati")
-def inserisci_predisposizione_dati(verifica: VerificaEdificioCompleta):
-    """
-    Inserisce o aggiorna i dati del form di predisposizione edificio e terminazioni ottiche
-    nella tabella verifiche_edifici.
-    """
+@app.put("/tfos/{tfo_id}", response_model=TfoInDB)
+def update_tfo(tfo_id: int = Path(..., description="ID TFO"), tfo_data: TfoCreate = Body(...)):
+    """Aggiorna una TFO esistente."""
+    conn = None
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-        # Verifica se l'edificio esiste
-        cursor.execute("SELECT id FROM catasto_abitazioni WHERE id = %s", (verifica.id_abitazione,))
-        if cursor.fetchone() is None:
-            raise HTTPException(status_code=404, detail=f"Edificio con ID {verifica.id_abitazione} non trovato")
-        # Verifica se esiste già un record per questo edificio
-        cursor.execute("SELECT id FROM verifiche_edifici WHERE id_abitazione = %s", (verifica.id_abitazione,))
-        record_esistente = cursor.fetchone()
-        if record_esistente:
-            # Recupera i dati esistenti prima di aggiornare
-            cursor.execute("""
-                SELECT indirizzo, lat, lon, uso_edificio, comune, codice_catastale, data_predisposizione
-                FROM verifiche_edifici
-                WHERE id_abitazione = %s
-            """, (verifica.id_abitazione,))
-            dati_esistenti = cursor.fetchone()
-            # Aggiorna solo i campi TFO, preservando i dati esistenti per gli altri campi
-            cursor.execute("""
-                UPDATE verifiche_edifici SET
-                    predisposto_fibra = true,
-                    indirizzo = COALESCE(%s, indirizzo),
-                    lat = COALESCE(%s, lat),
-                    lon = COALESCE(%s, lon),
-                    uso_edificio = COALESCE(%s, uso_edificio),
-                    comune = COALESCE(%s, comune),
-                    codice_catastale = COALESCE(%s, codice_catastale),
-                    data_predisposizione = COALESCE(%s, data_predisposizione),
-                    scala = %s,
-                    piano = %s,
-                    interno = %s,
-                    id_operatore = %s,
-                    id_tfo = %s,
-                    id_roe = %s
-                WHERE id_abitazione = %s
-            """, (
-                verifica.indirizzo if verifica.indirizzo else None,
-                verifica.lat,
-                verifica.lon,
-                verifica.uso_edificio,
-                verifica.comune if verifica.comune else dati_esistenti[4],
-                verifica.codice_catastale,
-                verifica.data_predisposizione if verifica.data_predisposizione else None,
-                verifica.scala,
-                verifica.piano,
-                verifica.interno,
-                verifica.id_operatore,
-                verifica.id_tfo,
-                verifica.id_roe,
-                verifica.id_abitazione
-            ))
-            message = f"Dati di predisposizione per l'edificio con ID {verifica.id_abitazione} aggiornati con successo"
-        else:
-            # Inserisci un nuovo record
-            cursor.execute("""
-                INSERT INTO verifiche_edifici (
-                    id_abitazione, predisposto_fibra, indirizzo, lat, lon, 
-                    uso_edificio, comune, codice_catastale, 
-                    data_predisposizione, scala, piano, interno, 
-                    id_operatore, id_tfo, id_roe
-                ) VALUES (
-                    %s, true, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-            """, (
-                verifica.id_abitazione,
-                verifica.indirizzo,
-                verifica.lat,
-                verifica.lon,
-                verifica.uso_edificio,
-                verifica.comune,
-                verifica.codice_catastale,
-                verifica.data_predisposizione,
-                verifica.scala,
-                verifica.piano,
-                verifica.interno,
-                verifica.id_operatore,
-                verifica.id_tfo,
-                verifica.id_roe
-            ))
-            message = f"Dati di predisposizione per l'edificio con ID {verifica.id_abitazione} inseriti con successo"
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        update_query = """
+            UPDATE verifiche_edifici SET
+                data_predisposizione = %s, scala = %s, piano = %s, interno = %s,
+                id_operatore = %s, id_tfo = %s, id_roe = %s
+            WHERE id = %s AND id_tfo IS NOT NULL RETURNING *;
+        """
+        cursor.execute(update_query, (
+            tfo_data.data_predisposizione, tfo_data.scala, tfo_data.piano,
+            tfo_data.interno, tfo_data.id_operatore, tfo_data.id_tfo,
+            tfo_data.id_roe, tfo_id
+        ))
+        updated_tfo = cursor.fetchone()
+        if not updated_tfo:
+            raise HTTPException(status_code=404, detail=f"TFO ID {tfo_id} non trovata.")
         conn.commit()
-        return {
-            "status": "success", 
-            "message": message
-        }
+        return TfoInDB(**{k: json_serializable(v) for k, v in updated_tfo.items()})
     except HTTPException:
+        if conn: conn.rollback()
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore durante l'inserimento dei dati: {str(e)}")
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Errore aggiornamento TFO: {e}")
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        if conn: conn.close()
+
+@app.delete("/tfos/{tfo_id}", response_model=BaseResponse)
+def delete_tfo(tfo_id: int = Path(..., description="ID TFO")):
+    """Elimina una TFO."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM verifiche_edifici WHERE id = %s AND id_tfo IS NOT NULL", (tfo_id,))
+        deleted_count = cursor.rowcount
+        if deleted_count == 0:
+            raise HTTPException(status_code=404, detail=f"TFO ID {tfo_id} non trovata.")
+        conn.commit()
+        return BaseResponse(message=f"TFO ID {tfo_id} eliminata.")
+    except HTTPException:
+        if conn: conn.rollback()
+        raise
+    except Exception as e:
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Errore eliminazione TFO: {e}")
+    finally:
+        if conn: conn.close()
