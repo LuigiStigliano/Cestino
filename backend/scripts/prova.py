@@ -20,6 +20,7 @@ DB_CONFIG = {
     'host': os.getenv("POSTGRES_HOST", "localhost"),
     'database': os.getenv("POSTGRES_DB", "aquila_gis"),
     'user': os.getenv("POSTGRES_USER", "postgres"),
+    'port': os.getenv("POSTGRES_PORT", "5432"),
     'password': os.getenv("POSTGRES_PASSWORD", "sys")
 }
 
