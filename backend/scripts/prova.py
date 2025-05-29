@@ -44,7 +44,15 @@ def create_table_if_not_exists(cursor):
         geometry GEOMETRY(MULTIPOLYGONZ, 4326),
         centroide GEOMETRY(POINT, 4326),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        predisposto_fibra BOOLEAN
+        predisposto_fibra BOOLEAN,
+        indirizzo TEXT,
+        uso_edificio TEXT,
+        comune TEXT,
+        codice_belfiore TEXT,
+        codice_catastale TEXT,
+        data_predisposizione DATE,
+        lat NUMERIC,
+        lon NUMERIC
     );
     """
     create_index_sql = """
@@ -57,22 +65,13 @@ def create_table_if_not_exists(cursor):
     CREATE TABLE IF NOT EXISTS verifiche_edifici (
         id SERIAL PRIMARY KEY,
         id_abitazione INTEGER REFERENCES catasto_abitazioni(id),
-        predisposto_fibra BOOLEAN,
-        indirizzo TEXT,
-        lat NUMERIC,
-        lon NUMERIC,
-        uso_edificio TEXT,
-        comune TEXT,
-        codice_belfiore TEXT,
-        codice_catastale TEXT,
-        tipo_edificio TEXT,
-        data_predisposizione DATE,
         scala TEXT,
         piano TEXT,
         interno TEXT,
         id_operatore TEXT,
         id_tfo TEXT,
-        id_roe TEXT
+        id_roe TEXT,
+        data_predisposizione_tfo DATE
     );
     """
     cursor.execute(create_table_sql)
@@ -86,7 +85,7 @@ def create_trigger(cursor):
     RETURNS TRIGGER AS $$
     BEGIN
       UPDATE catasto_abitazioni
-      SET predisposto_fibra = NEW.predisposto_fibra
+      SET predisposto_fibra = TRUE
       WHERE id = NEW.id_abitazione;
       RETURN NEW;
     END;

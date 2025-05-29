@@ -98,7 +98,7 @@ class BaseResponse(BaseModel):
     message: Optional[str] = None
 
 class PredisposizioneBase(BaseModel):
-    id_abitazione: int
+    id: int  # ID della tabella catasto_abitazioni
     indirizzo: Optional[str] = None
     comune: Optional[str] = None
     codice_catastale: Optional[str] = None
@@ -107,13 +107,14 @@ class PredisposizioneBase(BaseModel):
     lon: Optional[float] = None
     uso_edificio: Optional[str] = None
     codice_belfiore: Optional[str] = None
+    predisposto_fibra: Optional[bool] = None
 
 class PredisposizioneInDB(PredisposizioneBase):
-    id: int # ID univoco della tabella verifiche_edifici
+    pass
 
 class TfoBase(BaseModel):
     id_abitazione: int
-    data_predisposizione: Optional[datetime.date] = None
+    data_predisposizione_tfo: Optional[datetime.date] = None
     scala: Optional[str] = None
     piano: Optional[str] = None
     interno: Optional[str] = None
@@ -125,14 +126,15 @@ class TfoCreate(TfoBase):
     pass
 
 class TfoInDB(TfoBase):
-    id: int # ID univoco della tabella verifiche_edifici
+    id: int  # ID univoco della tabella verifiche_edifici
+    # Questi campi vengono recuperati dalla tabella catasto_abitazioni
     indirizzo: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
     codice_catastale: Optional[str] = None
 
 class PredisposizioneCreate(BaseModel):
-    id: int # Questo è l'id_abitazione da catasto_abitazioni
+    id: int  # Questo è l'id della tabella catasto_abitazioni
     indirizzo: str
     lat: Optional[float] = None
     lon: Optional[float] = None
@@ -227,11 +229,13 @@ def get_geojson_by_bbox(
 def get_predisposizioni():
     """Restituisce tutte le predisposizioni registrate (una per edificio)."""
     query = """
-        SELECT DISTINCT ON (v.id_abitazione) v.*
-        FROM verifiche_edifici v
-        WHERE v.predisposto_fibra = true
-        ORDER BY v.id_abitazione, v.id ASC;
-    """ # Prende il primo record (più vecchio) per ogni edificio predisposto
+        SELECT 
+            c.id, c.indirizzo, c.comune, c.codice_catastale, c.data_predisposizione,
+            c.lat, c.lon, c.uso_edificio, c.codice_belfiore, c.predisposto_fibra
+        FROM catasto_abitazioni c
+        WHERE c.predisposto_fibra = true
+        ORDER BY c.id ASC;
+    """
     conn = None
     try:
         conn = get_db_connection()
@@ -257,38 +261,31 @@ def create_predisposizione(pred: PredisposizioneCreate):
         if cursor.fetchone() is None:
             raise HTTPException(status_code=404, detail=f"Edificio con ID {pred.id} non trovato")
 
-        cursor.execute("SELECT id FROM verifiche_edifici WHERE id_abitazione = %s AND id_tfo IS NULL", (pred.id,))
-        existing = cursor.fetchone()
+        # Aggiorna direttamente la tabella catasto_abitazioni con i dati anagrafici
+        update_query = """
+            UPDATE catasto_abitazioni SET
+                predisposto_fibra = true, 
+                indirizzo = %s, 
+                lat = %s, 
+                lon = %s,
+                uso_edificio = %s, 
+                comune = %s, 
+                codice_belfiore = %s,
+                codice_catastale = %s, 
+                data_predisposizione = %s
+            WHERE id = %s 
+            RETURNING id, indirizzo, lat, lon, uso_edificio, comune, 
+                     codice_belfiore, codice_catastale, data_predisposizione, predisposto_fibra;
+        """
+        cursor.execute(update_query, (
+            pred.indirizzo, pred.lat, pred.lon, pred.uso_edificio, pred.comune,
+            pred.codice_belfiore, pred.codice_catastale, pred.data_predisposizione,
+            pred.id
+        ))
 
-        if existing:
-            update_query = """
-                UPDATE verifiche_edifici SET
-                    predisposto_fibra = true, indirizzo = %s, lat = %s, lon = %s,
-                    uso_edificio = %s, comune = %s, codice_belfiore = %s,
-                    codice_catastale = %s, data_predisposizione = %s
-                WHERE id = %s RETURNING *;
-            """
-            cursor.execute(update_query, (
-                pred.indirizzo, pred.lat, pred.lon, pred.uso_edificio, pred.comune,
-                pred.codice_belfiore, pred.codice_catastale, pred.data_predisposizione,
-                existing['id']
-            ))
-        else:
-            insert_query = """
-                INSERT INTO verifiche_edifici (
-                    id_abitazione, predisposto_fibra, indirizzo, lat, lon, uso_edificio,
-                    comune, codice_belfiore, codice_catastale, data_predisposizione
-                ) VALUES (%s, true, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *;
-            """
-            cursor.execute(insert_query, (
-                pred.id, pred.indirizzo, pred.lat, pred.lon, pred.uso_edificio,
-                pred.comune, pred.codice_belfiore, pred.codice_catastale, pred.data_predisposizione
-            ))
-
-        new_record = cursor.fetchone()
-        cursor.execute("UPDATE catasto_abitazioni SET predisposto_fibra = true WHERE id = %s", (pred.id,))
+        updated_record = cursor.fetchone()
         conn.commit()
-        return PredisposizioneInDB(**{k: json_serializable(v) for k, v in new_record.items()})
+        return PredisposizioneInDB(**{k: json_serializable(v) for k, v in updated_record.items()})
 
     except HTTPException:
         if conn: conn.rollback()
@@ -307,13 +304,32 @@ def delete_predisposizione(predisposizione_id: int = Path(..., description="ID a
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Prima elimina tutte le TFO associate
         cursor.execute("DELETE FROM verifiche_edifici WHERE id_abitazione = %s", (predisposizione_id,))
         deleted_count = cursor.rowcount
-        if deleted_count == 0:
+        
+        # Poi resetta lo stato di predisposizione nell'edificio
+        cursor.execute("""
+            UPDATE catasto_abitazioni SET 
+                predisposto_fibra = NULL,
+                indirizzo = NULL,
+                comune = NULL,
+                codice_catastale = NULL,
+                data_predisposizione = NULL,
+                lat = NULL,
+                lon = NULL,
+                uso_edificio = NULL,
+                codice_belfiore = NULL
+            WHERE id = %s
+            RETURNING id
+        """, (predisposizione_id,))
+        
+        if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail=f"Nessuna predisposizione trovata per ID {predisposizione_id}")
-        cursor.execute("UPDATE catasto_abitazioni SET predisposto_fibra = NULL WHERE id = %s", (predisposizione_id,))
+            
         conn.commit()
-        return BaseResponse(message=f"Predisposizione e {deleted_count} record associati eliminati per ID {predisposizione_id}")
+        return BaseResponse(message=f"Predisposizione e {deleted_count} TFO associate eliminate per ID {predisposizione_id}")
     except HTTPException:
         if conn: conn.rollback()
         raise
@@ -329,10 +345,12 @@ def delete_predisposizione(predisposizione_id: int = Path(..., description="ID a
 def get_tfos_for_predisposizione(predisposizione_id: int = Path(..., description="ID abitazione")):
     """Restituisce tutte le TFO per un edificio."""
     query = """
-        SELECT id, id_abitazione, data_predisposizione, scala, piano, interno,
-               id_operatore, id_tfo, id_roe, indirizzo, lat, lon, codice_catastale
-        FROM verifiche_edifici
-        WHERE id_abitazione = %s AND id_tfo IS NOT NULL;
+        SELECT v.id, v.id_abitazione, v.data_predisposizione_tfo as data_predisposizione, v.scala, v.piano, v.interno,
+               v.id_operatore, v.id_tfo, v.id_roe, 
+               c.indirizzo, c.lat, c.lon, c.codice_catastale
+        FROM verifiche_edifici v
+        JOIN catasto_abitazioni c ON v.id_abitazione = c.id
+        WHERE v.id_abitazione = %s AND v.id_tfo IS NOT NULL;
     """
     conn = None
     try:
@@ -353,28 +371,38 @@ def create_tfo(tfo: TfoCreate):
     try:
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("SELECT * FROM verifiche_edifici WHERE id_abitazione = %s ORDER BY id ASC LIMIT 1", (tfo.id_abitazione,))
-        pred_base = cursor.fetchone()
-        if not pred_base:
-            raise HTTPException(status_code=404, detail=f"Predisposizione base non trovata per ID {tfo.id_abitazione}")
+        
+        # Verifica che l'edificio esista e sia predisposto
+        cursor.execute("SELECT id, indirizzo, lat, lon, codice_catastale FROM catasto_abitazioni WHERE id = %s AND predisposto_fibra = true", (tfo.id_abitazione,))
+        edificio = cursor.fetchone()
+        if not edificio:
+            raise HTTPException(status_code=404, detail=f"Edificio predisposto con ID {tfo.id_abitazione} non trovato")
 
+        # Inserisci la nuova TFO
         insert_query = """
             INSERT INTO verifiche_edifici (
-                id_abitazione, predisposto_fibra, indirizzo, lat, lon, uso_edificio,
-                comune, codice_belfiore, codice_catastale, data_predisposizione,
-                scala, piano, interno, id_operatore, id_tfo, id_roe
-            ) VALUES (%s, true, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING *;
+                id_abitazione, scala, piano, interno, 
+                id_operatore, id_tfo, id_roe, data_predisposizione_tfo
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, id_abitazione, scala, piano, interno, 
+                     id_operatore, id_tfo, id_roe, data_predisposizione_tfo;
         """
         cursor.execute(insert_query, (
-            tfo.id_abitazione, pred_base['indirizzo'], pred_base['lat'], pred_base['lon'], pred_base['uso_edificio'],
-            pred_base['comune'], pred_base['codice_belfiore'], pred_base['codice_catastale'],
-            tfo.data_predisposizione, tfo.scala, tfo.piano, tfo.interno,
-            tfo.id_operatore, tfo.id_tfo, tfo.id_roe
+            tfo.id_abitazione, tfo.scala, tfo.piano, tfo.interno,
+            tfo.id_operatore, tfo.id_tfo, tfo.id_roe, tfo.data_predisposizione_tfo
         ))
         new_tfo = cursor.fetchone()
+        
+        # Combina i dati della TFO con i dati dell'edificio per la risposta
+        result = dict(new_tfo)
+        result['indirizzo'] = edificio['indirizzo']
+        result['lat'] = edificio['lat']
+        result['lon'] = edificio['lon']
+        result['codice_catastale'] = edificio['codice_catastale']
+        result['data_predisposizione'] = result.pop('data_predisposizione_tfo', None)
+        
         conn.commit()
-        return TfoInDB(**{k: json_serializable(v) for k, v in new_tfo.items()})
+        return TfoInDB(**{k: json_serializable(v) for k, v in result.items()})
     except HTTPException:
         if conn: conn.rollback()
         raise
@@ -391,22 +419,42 @@ def update_tfo(tfo_id: int = Path(..., description="ID TFO"), tfo_data: TfoCreat
     try:
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Aggiorna solo i campi della TFO
         update_query = """
             UPDATE verifiche_edifici SET
-                data_predisposizione = %s, scala = %s, piano = %s, interno = %s,
+                data_predisposizione_tfo = %s, scala = %s, piano = %s, interno = %s,
                 id_operatore = %s, id_tfo = %s, id_roe = %s
-            WHERE id = %s AND id_tfo IS NOT NULL RETURNING *;
+            WHERE id = %s RETURNING id, id_abitazione, scala, piano, interno, 
+                   id_operatore, id_tfo, id_roe, data_predisposizione_tfo;
         """
         cursor.execute(update_query, (
-            tfo_data.data_predisposizione, tfo_data.scala, tfo_data.piano,
+            tfo_data.data_predisposizione_tfo, tfo_data.scala, tfo_data.piano,
             tfo_data.interno, tfo_data.id_operatore, tfo_data.id_tfo,
             tfo_data.id_roe, tfo_id
         ))
         updated_tfo = cursor.fetchone()
         if not updated_tfo:
             raise HTTPException(status_code=404, detail=f"TFO ID {tfo_id} non trovata.")
+            
+        # Recupera i dati dell'edificio per completare la risposta
+        cursor.execute("""
+            SELECT indirizzo, lat, lon, codice_catastale 
+            FROM catasto_abitazioni 
+            WHERE id = %s
+        """, (updated_tfo['id_abitazione'],))
+        edificio = cursor.fetchone()
+        
+        # Combina i dati per la risposta
+        result = dict(updated_tfo)
+        result['indirizzo'] = edificio['indirizzo']
+        result['lat'] = edificio['lat']
+        result['lon'] = edificio['lon']
+        result['codice_catastale'] = edificio['codice_catastale']
+        result['data_predisposizione'] = result.pop('data_predisposizione_tfo', None)
+        
         conn.commit()
-        return TfoInDB(**{k: json_serializable(v) for k, v in updated_tfo.items()})
+        return TfoInDB(**{k: json_serializable(v) for k, v in result.items()})
     except HTTPException:
         if conn: conn.rollback()
         raise
@@ -423,7 +471,7 @@ def delete_tfo(tfo_id: int = Path(..., description="ID TFO")):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM verifiche_edifici WHERE id = %s AND id_tfo IS NOT NULL", (tfo_id,))
+        cursor.execute("DELETE FROM verifiche_edifici WHERE id = %s", (tfo_id,))
         deleted_count = cursor.rowcount
         if deleted_count == 0:
             raise HTTPException(status_code=404, detail=f"TFO ID {tfo_id} non trovata.")

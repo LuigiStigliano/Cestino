@@ -230,8 +230,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function addPredisposizioneToTable(pred) {
         const newRow = predisposizioniTableBody.insertRow();
-        newRow.dataset.id = pred.id; // ID DB (verifiche_edifici)
-        newRow.dataset.abitazioneId = pred.id_abitazione;
+        newRow.dataset.id = pred.id; // ID della tabella catasto_abitazioni
+        newRow.dataset.abitazioneId = pred.id; // Ora è lo stesso ID
         newRow.dataset.indirizzo = pred.indirizzo || '';
         newRow.dataset.lat = pred.lat || '';
         newRow.dataset.lon = pred.lon || '';
@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', function() {
         newRow.dataset.codiceBelfiore = pred.codice_belfiore || '';
 
         newRow.innerHTML = `
-            <td>${pred.id_abitazione}</td>
+            <td>${pred.id}</td>
             <td>${pred.indirizzo || 'N/D'}</td>
             <td>${pred.comune || 'N/D'}</td>
             <td>${pred.codice_catastale || 'N/D'}</td>
@@ -408,7 +408,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const payload = {
             id_abitazione: parseInt(abitazioneId),
-            data_predisposizione: formDataPredisposizioneTfo.value || null,
+            data_predisposizione_tfo: formDataPredisposizioneTfo.value || null,
             scala: formScalaTfo.value || null,
             piano: formPianoTfo.value || null,
             interno: formInternoTfo.value || null,
@@ -417,7 +417,7 @@ document.addEventListener('DOMContentLoaded', function() {
             id_roe: formCodiceRoeTfo.value || null,
         };
 
-        if (!payload.data_predisposizione || !payload.id_tfo) {
+        if (!payload.data_predisposizione_tfo || !payload.id_tfo) {
              showModal("Attenzione", "Compila Data TFO e Codice TFO.", 'warning');
             return;
         }
