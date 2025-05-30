@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+psycopg2-binary
+python-dotenv
+pydantic
+pydantic-settings
+geopandas
+Fiona
+pyproj
+shapely
+pandas
+GeoAlchemy2

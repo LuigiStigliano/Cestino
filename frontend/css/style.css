@@ -1,0 +1,75 @@
+/*
+ * Stili per la mappa
+ */
+#map {
+    height: 500px; /* Imposta l'altezza della mappa a 500 pixel */
+    width: 100%; /* Imposta la larghezza della mappa al 100% del suo contenitore */
+    margin-bottom: 1rem; /* Aggiunge un margine inferiore di 1rem (unità relativa) */
+}
+
+/*
+ * Stili per il corpo della pagina (body)
+ */
+body {
+    margin: 0; /* Rimuove tutti i margini dal corpo */
+    padding-top: 1rem; /* Aggiunge un padding (spaziatura interna) superiore di 1rem */
+    padding-bottom: 1rem; /* Aggiunge un padding inferiore di 1rem */
+}
+
+/*
+ * Stili per il contenitore principale
+ */
+.container {
+    max-width: 1140px; /* Imposta la larghezza massima del contenitore a 1140 pixel */
+    margin-left: auto; /* Centra il contenitore orizzontalmente (margine sinistro automatico) */
+    margin-right: auto; /* Centra il contenitore orizzontalmente (margine destro automatico) */
+    padding-left: 15px; /* Aggiunge un padding sinistro di 15 pixel */
+    padding-right: 15px; /* Aggiunge un padding destro di 15 pixel */
+}
+
+/*
+ * Stili specifici per i contenitori Leaflet (libreria per mappe)
+ */
+.leaflet-container {
+    font-size: 1rem; /* Imposta la dimensione del font a 1rem */
+}
+
+/*
+ * Stili per le sezioni del form
+ */
+.form-section {
+    margin-bottom: 2rem; /* Aggiunge un margine inferiore di 2rem */
+}
+
+/*
+ * Stili per nascondere le sezioni TFO per default
+ */
+#sectionTfo,
+#formTfoContainer {
+    display: none; /* Nasconde gli elementi con ID 'sectionTfo' e 'formTfoContainer' */
+}
+
+/*
+ * Stili per le tabelle 'striped' (a righe alternate) - Effetto hover
+ */
+.table-striped tbody tr:hover {
+    background-color: #f5f5f5; /* Cambia il colore di sfondo della riga al passaggio del mouse */
+    cursor: pointer; /* Cambia il cursore a 'pointer' (manina) al passaggio del mouse */
+}
+
+/*
+ * Stili per le tabelle 'striped' - Riga selezionata
+ */
+.table-striped tbody tr.selected {
+    background-color: #e0e0e0; /* Imposta un colore di sfondo diverso per le righe con la classe 'selected' */
+}
+
+/*
+ * Stili per rendere le tabelle responsive (adattabili)
+ */
+.table-responsive {
+    margin-bottom: 1rem; /* Aggiunge un margine inferiore di 1rem */
+    /* Nota: Questa classe di solito include anche 'overflow-x: auto;'
+       per aggiungere una barra di scorrimento orizzontale su schermi piccoli,
+       ma non è presente in questo snippet. */
+}
