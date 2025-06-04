@@ -183,8 +183,8 @@ FibraGIS_v2/
 
 1. **Clonare il repository (se non già fatto):**
    ```bash
-   git clone <URL_DEL_REPOSITORY> # <-- Ricordati di inserirlo, brutto coglione
-   cd FibraGIS_v2/backend
+   git clone https://github.com/LuigiStigliano/FibraGIS_v2.git
+   cd FibraGIS_v2
    ```
 
 2. Creare e attivare un ambiente virtuale:
@@ -200,7 +200,7 @@ FibraGIS_v2/
 
 3. Installare le dipendenze:
    ```bash
-   pip install -r requirements.txt
+   pip install -r backend/requirements.txt
    ```
 
 4. **Configurare le variabili d'ambiente:**
